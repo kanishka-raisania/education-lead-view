@@ -1,11 +1,55 @@
 
-import React, { useState } from 'react';
-import { TrendingUp, Users, Phone, Mail, Upload } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { TrendingUp, Users, AlertTriangle, UserCheck, Upload, Filter } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from '../ui/dropdown-menu';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../ui/chart';
+import { 
+  PieChart, 
+  Pie, 
+  Cell, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  LineChart, 
+  Line, 
+  ResponsiveContainer 
+} from 'recharts';
+import Papa from 'papaparse';
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, startOfWeek, endOfWeek, subDays } from 'date-fns';
+
+interface LeadData {
+  status: string;
+  'Lost Reason': string;
+  'Assignee Name': string;
+  'Assignee Email': string;
+  Name: string;
+  Phone: string;
+  Email: string;
+  City: string;
+  'Fb Campaign': string;
+  'Fb Lead ID': string;
+  'Facebook Ad': string;
+  'Student Preference': string;
+  'Created On': string;
+  'Modified On': string;
+  'Batch Names': string;
+  parsedDate?: Date;
+}
 
 const OverallLeads = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [leadsData, setLeadsData] = useState<LeadData[]>([]);
+  const [timeFilter, setTimeFilter] = useState('All Time');
+  const [timeViewMode, setTimeViewMode] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Yearly'>('Monthly');
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -14,58 +58,239 @@ const OverallLeads = () => {
     }
   };
 
-  const handleSubmit = () => {
-    if (selectedFile) {
-      console.log('Uploading file:', selectedFile.name);
-      // Handle file upload logic here
+  const parseDate = (dateString: string): Date | null => {
+    try {
+      // Parse format: "15-05-2025 12:06:07 pm"
+      const [datePart, timePart, ampm] = dateString.split(' ');
+      const [day, month, year] = datePart.split('-');
+      const [hours, minutes, seconds] = timePart.split(':');
+      
+      let hour = parseInt(hours);
+      if (ampm.toLowerCase() === 'pm' && hour !== 12) hour += 12;
+      if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
+      
+      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
+    } catch {
+      return null;
     }
   };
 
-  const stats = [
-    {
-      title: 'Total Leads',
-      value: '2,847',
-      change: '+12.3%',
-      icon: Users,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-    },
-    {
-      title: 'This Month',
-      value: '486',
-      change: '+8.1%',
-      icon: TrendingUp,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100',
-    },
-    {
-      title: 'Phone Calls',
-      value: '1,234',
-      change: '+5.4%',
-      icon: Phone,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100',
-    },
-    {
-      title: 'Email Inquiries',
-      value: '1,613',
-      change: '+15.2%',
-      icon: Mail,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-100',
-    },
-  ];
+  const handleSubmit = () => {
+    if (selectedFile) {
+      console.log('Uploading file:', selectedFile.name);
+      
+      Papa.parse(selectedFile, {
+        header: true,
+        complete: (results) => {
+          const processedData = results.data
+            .filter((row: any) => {
+              // Skip empty rows
+              return Object.values(row).some(value => value && value.toString().trim() !== '');
+            })
+            .map((row: any) => {
+              const parsedDate = parseDate(row['Created On']);
+              return {
+                ...row,
+                parsedDate
+              } as LeadData;
+            })
+            .filter(row => row.parsedDate); // Only keep rows with valid dates
+          
+          setLeadsData(processedData);
+          console.log('Processed data:', processedData);
+        },
+        error: (error) => {
+          console.error('Error parsing CSV:', error);
+        }
+      });
+    }
+  };
+
+  const getFilteredData = useMemo(() => {
+    if (!leadsData.length) return [];
+
+    const now = new Date();
+    let startDate: Date;
+    let endDate = now;
+
+    switch (timeFilter) {
+      case 'Last 7 Days':
+        startDate = subDays(now, 7);
+        break;
+      case 'Last 30 Days':
+        startDate = subDays(now, 30);
+        break;
+      case 'This Month':
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+        break;
+      case 'All Time':
+      default:
+        return leadsData;
+    }
+
+    return leadsData.filter(lead => 
+      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: startDate, end: endDate })
+    );
+  }, [leadsData, timeFilter]);
+
+  const stats = useMemo(() => {
+    const filteredData = getFilteredData;
+    const totalLeads = filteredData.length;
+    
+    // This month data
+    const thisMonth = startOfMonth(new Date());
+    const endThisMonth = endOfMonth(new Date());
+    const thisMonthLeads = filteredData.filter(lead => 
+      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: thisMonth, end: endThisMonth })
+    ).length;
+    
+    // Previous month for comparison
+    const lastMonth = startOfMonth(subMonths(new Date(), 1));
+    const endLastMonth = endOfMonth(subMonths(new Date(), 1));
+    const lastMonthLeads = leadsData.filter(lead => 
+      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth })
+    ).length;
+    
+    const monthlyChange = lastMonthLeads > 0 ? 
+      ((thisMonthLeads - lastMonthLeads) / lastMonthLeads * 100).toFixed(1) : '0';
+    
+    const lostLeads = filteredData.filter(lead => 
+      lead.status.toLowerCase().includes('lost')
+    ).length;
+    
+    const freshLeads = filteredData.filter(lead => 
+      lead.status.toLowerCase().includes('fresh')
+    ).length;
+
+    return [
+      {
+        title: 'Total Leads',
+        value: totalLeads.toString(),
+        change: '+12.3%',
+        icon: Users,
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-100',
+      },
+      {
+        title: 'This Month',
+        value: thisMonthLeads.toString(),
+        change: `${monthlyChange.startsWith('-') ? '' : '+'}${monthlyChange}%`,
+        icon: TrendingUp,
+        color: 'text-green-600',
+        bgColor: 'bg-green-100',
+      },
+      {
+        title: 'Lost Leads',
+        value: lostLeads.toString(),
+        change: '+5.4%',
+        icon: AlertTriangle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
+      },
+      {
+        title: 'Fresh Leads',
+        value: freshLeads.toString(),
+        change: '+15.2%',
+        icon: UserCheck,
+        color: 'text-green-600',
+        bgColor: 'bg-green-100',
+      },
+    ];
+  }, [getFilteredData, leadsData]);
+
+  // Chart data processing
+  const statusDistribution = useMemo(() => {
+    const statusCounts: { [key: string]: number } = {};
+    getFilteredData.forEach(lead => {
+      const status = lead.status || 'Unknown';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    
+    return Object.entries(statusCounts).map(([status, count]) => ({
+      name: status,
+      value: count
+    }));
+  }, [getFilteredData]);
+
+  const assigneeData = useMemo(() => {
+    const assigneeCounts: { [key: string]: number } = {};
+    getFilteredData.forEach(lead => {
+      const assignee = lead['Assignee Name'] || 'Unassigned';
+      assigneeCounts[assignee] = (assigneeCounts[assignee] || 0) + 1;
+    });
+    
+    return Object.entries(assigneeCounts)
+      .map(([assignee, count]) => ({ name: assignee, value: count }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [getFilteredData]);
+
+  const cityData = useMemo(() => {
+    const cityCounts: { [key: string]: number } = {};
+    getFilteredData.forEach(lead => {
+      const city = lead.City || 'Unknown';
+      cityCounts[city] = (cityCounts[city] || 0) + 1;
+    });
+    
+    return Object.entries(cityCounts)
+      .map(([city, count]) => ({ name: city, value: count }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [getFilteredData]);
+
+  const topAdsData = useMemo(() => {
+    const adCounts: { [key: string]: number } = {};
+    getFilteredData.forEach(lead => {
+      const ad = lead['Facebook Ad'] || 'Unknown';
+      if (ad !== 'Unknown') {
+        adCounts[ad] = (adCounts[ad] || 0) + 1;
+      }
+    });
+    
+    return Object.entries(adCounts)
+      .map(([ad, count]) => ({ name: ad, value: count }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [getFilteredData]);
+
+  const lostReasonData = useMemo(() => {
+    const reasonCounts: { [key: string]: number } = {};
+    getFilteredData
+      .filter(lead => lead.status.toLowerCase().includes('lost'))
+      .forEach(lead => {
+        const reason = lead['Lost Reason'] || 'Unknown';
+        reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+      });
+    
+    return Object.entries(reasonCounts).map(([reason, count]) => ({
+      name: reason,
+      value: count
+    }));
+  }, [getFilteredData]);
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Overall Leads Overview</h2>
-        <div className="mt-2 sm:mt-0">
-          <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option>Last 30 days</option>
-            <option>Last 7 days</option>
-            <option>Last 3 months</option>
-          </select>
+        <div className="mt-2 sm:mt-0 flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Filter className="h-4 w-4 mr-2" />
+                {timeFilter}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {['Last 7 Days', 'Last 30 Days', 'This Month', 'All Time'].map((filter) => (
+                <DropdownMenuItem key={filter} onClick={() => setTimeFilter(filter)}>
+                  {filter}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -115,6 +340,117 @@ const OverallLeads = () => {
           </Button>
         </CardContent>
       </Card>
+
+      {leadsData.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Lead Status Distribution */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Lead Status Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="h-64">
+                <PieChart>
+                  <Pie
+                    data={statusDistribution}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    dataKey="value"
+                  >
+                    {statusDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                </PieChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          {/* Leads by Assignee */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Leads by Assignee</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="h-64">
+                <BarChart data={assigneeData} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={80} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="value" fill="#8884d8" />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          {/* Leads by City */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Leads by City</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="h-64">
+                <BarChart data={cityData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="value" fill="#82ca9d" />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          {/* Top 5 Performing Ads */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Performing Ads</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="h-64">
+                <BarChart data={topAdsData} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={100} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="value" fill="#ffc658" />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          {/* Lost Reason Distribution */}
+          {lostReasonData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Lost Leads Reason</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{}} className="h-64">
+                  <PieChart>
+                    <Pie
+                      data={lostReasonData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={80}
+                      dataKey="value"
+                    >
+                      {lostReasonData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                  </PieChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Lead Activity</h3>

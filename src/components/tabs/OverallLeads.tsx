@@ -1,8 +1,26 @@
 
-import React from 'react';
-import { TrendingUp, Users, Phone, Mail } from 'lucide-react';
+import React, { useState } from 'react';
+import { TrendingUp, Users, Phone, Mail, Upload } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 const OverallLeads = () => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (selectedFile) {
+      console.log('Uploading file:', selectedFile.name);
+      // Handle file upload logic here
+    }
+  };
+
   const stats = [
     {
       title: 'Total Leads',
@@ -70,6 +88,33 @@ const OverallLeads = () => {
           );
         })}
       </div>
+
+      <Card className="bg-white">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5 text-blue-600" />
+            Upload Excel File
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <input
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={handleFileChange}
+              className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+            />
+            <p className="text-sm text-gray-500">Upload a new Excel or CSV file.</p>
+          </div>
+          <Button 
+            onClick={handleSubmit}
+            disabled={!selectedFile}
+            className="w-full sm:w-auto"
+          >
+            Submit
+          </Button>
+        </CardContent>
+      </Card>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Lead Activity</h3>

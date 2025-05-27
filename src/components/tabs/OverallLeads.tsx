@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { TrendingUp, Users, AlertTriangle, UserCheck, Upload, Filter, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -206,7 +205,7 @@ const OverallLeads = () => {
         icon: AlertTriangle,
         color: 'text-red-600',
         bgColor: 'bg-red-100',
-        changeColor: parseFloat(lostLeadsChange) >= 0 ? 'text-red-600' : 'text-green-600',
+        changeColor: parseFloat(lostLeadsChange) <= 0 ? 'text-green-600' : 'text-red-600',
       },
       {
         title: 'Fresh Leads',
@@ -257,14 +256,14 @@ const OverallLeads = () => {
     const assigneeCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
       const assignee = lead['Assignee Name'] || 'Unassigned';
-      if (assignee.trim() !== '') {
+      if (assignee.trim() !== '' && assignee !== 'Unassigned') {
         assigneeCounts[assignee] = (assigneeCounts[assignee] || 0) + 1;
       }
     });
     
     return Object.entries(assigneeCounts)
-      .map(([assignee, count]) => ({ name: assignee, value: count }))
-      .sort((a, b) => b.value - a.value)
+      .map(([assignee, count]) => ({ name: assignee, leads: count }))
+      .sort((a, b) => b.leads - a.leads)
       .slice(0, 10);
   }, [getFilteredData]);
 
@@ -293,8 +292,8 @@ const OverallLeads = () => {
     });
     
     return Object.entries(adCounts)
-      .map(([ad, count]) => ({ name: ad, value: count }))
-      .sort((a, b) => b.value - a.value)
+      .map(([ad, count]) => ({ name: ad, leads: count }))
+      .sort((a, b) => b.leads - a.leads)
       .slice(0, 5);
   }, [getFilteredData]);
 
@@ -334,8 +333,20 @@ const OverallLeads = () => {
 
   const leadsOverTimeData = useMemo(() => {
     const timeCounts: { [key: string]: { count: number; sortKey: string } } = {};
+    const now = new Date();
     
-    getFilteredData.forEach(lead => {
+    let filteredLeads = getFilteredData;
+    
+    // For weekly filter, only show weeks of current month
+    if (timeViewMode === 'Weekly') {
+      const currentMonthStart = startOfMonth(now);
+      const currentMonthEnd = endOfMonth(now);
+      filteredLeads = getFilteredData.filter(lead => 
+        lead.parsedDate && isWithinInterval(lead.parsedDate, { start: currentMonthStart, end: currentMonthEnd })
+      );
+    }
+    
+    filteredLeads.forEach(lead => {
       if (!lead.parsedDate) return;
       
       let timeKey: string;
@@ -343,14 +354,13 @@ const OverallLeads = () => {
       
       switch (timeViewMode) {
         case 'Daily':
-          timeKey = format(lead.parsedDate, 'dd MMM yyyy');
+          timeKey = format(lead.parsedDate, 'dd MMM');
           sortKey = format(lead.parsedDate, 'yyyy-MM-dd');
           break;
         case 'Weekly':
           const weekNum = getISOWeek(lead.parsedDate);
-          const year = getYear(lead.parsedDate);
-          timeKey = `Week ${weekNum}, ${year}`;
-          sortKey = `${year}-W${weekNum.toString().padStart(2, '0')}`;
+          timeKey = `Week ${weekNum}`;
+          sortKey = `${format(lead.parsedDate, 'yyyy-MM')}-W${weekNum.toString().padStart(2, '0')}`;
           break;
         case 'Monthly':
           timeKey = format(lead.parsedDate, 'MMM yyyy');
@@ -413,14 +423,14 @@ const OverallLeads = () => {
   const CustomLegend = (props: any) => {
     const { payload } = props;
     return (
-      <div className="flex flex-col space-y-2 mr-6">
+      <div className="flex flex-col space-y-2 text-sm max-w-48">
         {payload.map((entry: any, index: number) => (
-          <div key={index} className="flex items-center space-x-2 text-sm">
+          <div key={index} className="flex items-center space-x-2">
             <div 
-              className="w-4 h-4 rounded-sm" 
+              className="w-3 h-3 rounded-sm flex-shrink-0" 
               style={{ backgroundColor: entry.color }}
             />
-            <span className="text-gray-700">{entry.value}</span>
+            <span className="text-gray-700 text-xs truncate">{entry.value}</span>
           </div>
         ))}
       </div>
@@ -560,29 +570,31 @@ const OverallLeads = () => {
                 <CardTitle>Lead Status Distribution</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-center">
-                  <div className="flex-shrink-0 mr-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
                     <CustomLegend payload={statusDistribution.map((item, index) => ({
                       value: item.name,
                       color: CHART_COLORS[index % CHART_COLORS.length]
                     }))} />
                   </div>
-                  <ChartContainer config={{}} className="h-80 flex-1">
-                    <PieChart>
-                      <Pie
-                        data={statusDistribution}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        dataKey="value"
-                      >
-                        {statusDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                    </PieChart>
-                  </ChartContainer>
+                  <div className="flex-1">
+                    <ChartContainer config={{}} className="h-80">
+                      <PieChart>
+                        <Pie
+                          data={statusDistribution}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={100}
+                          dataKey="value"
+                        >
+                          {statusDistribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                      </PieChart>
+                    </ChartContainer>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -596,10 +608,10 @@ const OverallLeads = () => {
                 <ChartContainer config={{}} className="h-80">
                   <BarChart data={assigneeData} layout="horizontal" margin={{ left: 80 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
+                    <XAxis type="number" label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} />
                     <YAxis dataKey="name" type="category" width={100} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="value" fill="#3B82F6" />
+                    <Bar dataKey="leads" fill="#3B82F6" />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -641,7 +653,7 @@ const OverallLeads = () => {
                     <XAxis type="number" label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} />
                     <YAxis dataKey="name" type="category" width={150} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="value" fill="#F59E0B" />
+                    <Bar dataKey="leads" fill="#F59E0B" />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -678,30 +690,32 @@ const OverallLeads = () => {
                   <CardTitle>Lost Leads Reason</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-center">
-                    <div className="flex-shrink-0 mr-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0">
                       <CustomLegend payload={lostReasonData.map((item, index) => ({
                         value: item.name,
                         color: CHART_COLORS[index % CHART_COLORS.length]
                       }))} />
                     </div>
-                    <ChartContainer config={{}} className="h-80 flex-1">
-                      <PieChart>
-                        <Pie
-                          data={lostReasonData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={100}
-                          dataKey="value"
-                        >
-                          {lostReasonData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                      </PieChart>
-                    </ChartContainer>
+                    <div className="flex-1">
+                      <ChartContainer config={{}} className="h-80">
+                        <PieChart>
+                          <Pie
+                            data={lostReasonData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={100}
+                            dataKey="value"
+                          >
+                            {lostReasonData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                        </PieChart>
+                      </ChartContainer>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

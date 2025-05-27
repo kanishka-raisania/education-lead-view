@@ -25,7 +25,7 @@ import {
   Legend 
 } from 'recharts';
 import Papa from 'papaparse';
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, startOfWeek, endOfWeek, subDays, startOfDay, endOfDay, startOfYear, endOfYear, getISOWeek, getYear } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, startOfWeek, endOfWeek, subDays, startOfDay, endOfDay, startOfYear, endOfYear, getISOWeek, getYear, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns';
 
 interface LeadData {
   status: string;
@@ -137,48 +137,46 @@ const OverallLeads = () => {
 
   const stats = useMemo(() => {
     const filteredData = getFilteredData;
+    const now = new Date();
+    
+    // Current period data
     const totalLeads = filteredData.length;
-    
-    // This month data
-    const thisMonth = startOfMonth(new Date());
-    const endThisMonth = endOfMonth(new Date());
-    const thisMonthLeads = filteredData.filter(lead => 
-      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: thisMonth, end: endThisMonth })
-    ).length;
-    
-    // Previous month for comparison
-    const lastMonth = startOfMonth(subMonths(new Date(), 1));
-    const endLastMonth = endOfMonth(subMonths(new Date(), 1));
-    const lastMonthLeads = leadsData.filter(lead => 
-      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth })
-    ).length;
-    
-    const monthlyChange = lastMonthLeads > 0 ? 
-      ((thisMonthLeads - lastMonthLeads) / lastMonthLeads * 100).toFixed(1) : '0';
-    
     const lostLeads = filteredData.filter(lead => 
       lead.status.toLowerCase().includes('lost')
     ).length;
-    
     const freshLeads = filteredData.filter(lead => 
       lead.status.toLowerCase().includes('fresh')
     ).length;
-
-    // Previous period lost leads for comparison
+    
+    // This month data
+    const thisMonth = startOfMonth(now);
+    const endThisMonth = endOfMonth(now);
+    const thisMonthLeads = leadsData.filter(lead => 
+      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: thisMonth, end: endThisMonth })
+    ).length;
+    
+    // Previous month data for comparison
+    const lastMonth = startOfMonth(subMonths(now, 1));
+    const endLastMonth = endOfMonth(subMonths(now, 1));
+    const lastMonthLeads = leadsData.filter(lead => 
+      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth })
+    ).length;
     const lastMonthLostLeads = leadsData.filter(lead => 
       lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth }) &&
       lead.status.toLowerCase().includes('lost')
     ).length;
-
-    // Previous period fresh leads for comparison
     const lastMonthFreshLeads = leadsData.filter(lead => 
       lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth }) &&
       lead.status.toLowerCase().includes('fresh')
     ).length;
-
+    
+    // Calculate percentage changes
+    const totalLeadsChange = lastMonthLeads > 0 ? 
+      ((totalLeads - lastMonthLeads) / lastMonthLeads * 100).toFixed(1) : '0';
+    const thisMonthChange = lastMonthLeads > 0 ? 
+      ((thisMonthLeads - lastMonthLeads) / lastMonthLeads * 100).toFixed(1) : '0';
     const lostLeadsChange = lastMonthLostLeads > 0 ? 
       ((lostLeads - lastMonthLostLeads) / lastMonthLostLeads * 100).toFixed(1) : '0';
-    
     const freshLeadsChange = lastMonthFreshLeads > 0 ? 
       ((freshLeads - lastMonthFreshLeads) / lastMonthFreshLeads * 100).toFixed(1) : '0';
 
@@ -186,20 +184,20 @@ const OverallLeads = () => {
       {
         title: 'Total Leads',
         value: totalLeads.toString(),
-        change: `${monthlyChange.startsWith('-') ? '' : '+'}${monthlyChange}%`,
+        change: `${totalLeadsChange.startsWith('-') ? '' : '+'}${totalLeadsChange}%`,
         icon: Users,
         color: 'text-blue-600',
         bgColor: 'bg-blue-100',
-        changeColor: parseFloat(monthlyChange) >= 0 ? 'text-green-600' : 'text-red-600',
+        changeColor: parseFloat(totalLeadsChange) >= 0 ? 'text-green-600' : 'text-red-600',
       },
       {
         title: 'This Month',
         value: thisMonthLeads.toString(),
-        change: `${monthlyChange.startsWith('-') ? '' : '+'}${monthlyChange}%`,
+        change: `${thisMonthChange.startsWith('-') ? '' : '+'}${thisMonthChange}%`,
         icon: TrendingUp,
         color: 'text-green-600',
         bgColor: 'bg-green-100',
-        changeColor: parseFloat(monthlyChange) >= 0 ? 'text-green-600' : 'text-red-600',
+        changeColor: parseFloat(thisMonthChange) >= 0 ? 'text-green-600' : 'text-red-600',
       },
       {
         title: 'Lost Leads',
@@ -222,12 +220,12 @@ const OverallLeads = () => {
     ];
   }, [getFilteredData, leadsData]);
 
-  // Better color palette for charts
+  // Professional color palette for charts
   const CHART_COLORS = [
     '#3B82F6', // Blue
     '#EF4444', // Red
     '#10B981', // Green
-    '#F59E0B', // Yellow
+    '#F59E0B', // Amber
     '#8B5CF6', // Purple
     '#06B6D4', // Cyan
     '#F97316', // Orange
@@ -236,7 +234,7 @@ const OverallLeads = () => {
     '#6B7280', // Gray
     '#14B8A6', // Teal
     '#F43F5E', // Rose
-    '#8B5A2B', // Brown
+    '#7C2D12', // Brown
     '#7C3AED', // Violet
     '#059669', // Emerald
   ];
@@ -259,7 +257,9 @@ const OverallLeads = () => {
     const assigneeCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
       const assignee = lead['Assignee Name'] || 'Unassigned';
-      assigneeCounts[assignee] = (assigneeCounts[assignee] || 0) + 1;
+      if (assignee.trim() !== '') {
+        assigneeCounts[assignee] = (assigneeCounts[assignee] || 0) + 1;
+      }
     });
     
     return Object.entries(assigneeCounts)
@@ -271,8 +271,10 @@ const OverallLeads = () => {
   const cityData = useMemo(() => {
     const cityCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
-      const city = lead.City || 'Unknown';
-      cityCounts[city] = (cityCounts[city] || 0) + 1;
+      const city = lead.City || '';
+      if (city.trim() !== '' && city.toLowerCase() !== 'unknown') {
+        cityCounts[city] = (cityCounts[city] || 0) + 1;
+      }
     });
     
     return Object.entries(cityCounts)
@@ -284,8 +286,8 @@ const OverallLeads = () => {
   const topAdsData = useMemo(() => {
     const adCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
-      const ad = lead['Facebook Ad'] || 'Unknown';
-      if (ad !== 'Unknown' && ad.trim() !== '') {
+      const ad = lead['Facebook Ad'] || '';
+      if (ad.trim() !== '' && ad.toLowerCase() !== 'unknown') {
         adCounts[ad] = (adCounts[ad] || 0) + 1;
       }
     });
@@ -294,6 +296,25 @@ const OverallLeads = () => {
       .map(([ad, count]) => ({ name: ad, value: count }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
+  }, [getFilteredData]);
+
+  const studentPreferenceData = useMemo(() => {
+    const preferenceCounts: { [key: string]: number } = {};
+    getFilteredData.forEach(lead => {
+      const preference = lead['Student Preference'] || '';
+      const cleanPref = preference.trim();
+      if (cleanPref !== '' && 
+          cleanPref.toLowerCase() !== 'other' && 
+          cleanPref.toLowerCase() !== 'other_program' &&
+          cleanPref.toLowerCase() !== 'unknown') {
+        preferenceCounts[cleanPref] = (preferenceCounts[cleanPref] || 0) + 1;
+      }
+    });
+    
+    return Object.entries(preferenceCounts)
+      .map(([preference, count]) => ({ name: preference, value: count }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 7);
   }, [getFilteredData]);
 
   const lostReasonData = useMemo(() => {
@@ -312,7 +333,7 @@ const OverallLeads = () => {
   }, [getFilteredData]);
 
   const leadsOverTimeData = useMemo(() => {
-    const timeCounts: { [key: string]: number } = {};
+    const timeCounts: { [key: string]: { count: number; sortKey: string } } = {};
     
     getFilteredData.forEach(lead => {
       if (!lead.parsedDate) return;
@@ -322,13 +343,13 @@ const OverallLeads = () => {
       
       switch (timeViewMode) {
         case 'Daily':
-          timeKey = format(lead.parsedDate, 'dd MMM');
+          timeKey = format(lead.parsedDate, 'dd MMM yyyy');
           sortKey = format(lead.parsedDate, 'yyyy-MM-dd');
           break;
         case 'Weekly':
           const weekNum = getISOWeek(lead.parsedDate);
           const year = getYear(lead.parsedDate);
-          timeKey = `Week ${weekNum}`;
+          timeKey = `Week ${weekNum}, ${year}`;
           sortKey = `${year}-W${weekNum.toString().padStart(2, '0')}`;
           break;
         case 'Monthly':
@@ -344,47 +365,62 @@ const OverallLeads = () => {
           sortKey = format(lead.parsedDate, 'yyyy-MM');
       }
       
-      timeCounts[timeKey] = (timeCounts[timeKey] || 0) + 1;
+      if (!timeCounts[timeKey]) {
+        timeCounts[timeKey] = { count: 0, sortKey };
+      }
+      timeCounts[timeKey].count++;
     });
     
     return Object.entries(timeCounts)
-      .map(([time, count]) => ({ 
+      .map(([time, data]) => ({ 
         time, 
-        count,
-        sortKey: time // For proper sorting
+        count: data.count,
+        sortKey: data.sortKey
       }))
-      .sort((a, b) => {
-        // Simple string comparison for most cases
-        if (timeViewMode === 'Daily') {
-          return new Date(a.time).getTime() - new Date(b.time).getTime();
-        }
-        return a.time.localeCompare(b.time);
-      });
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   }, [getFilteredData, timeViewMode]);
 
   const recentLeads = useMemo(() => {
+    const now = new Date();
     return getFilteredData
       .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))
       .slice(0, 5)
-      .map(lead => ({
-        name: lead.Name || 'Unknown',
-        country: lead.City || 'Unknown Location',
-        status: lead.status || 'Unknown',
-        time: lead.parsedDate ? format(lead.parsedDate, 'HH:mm') : 'Unknown',
-      }));
+      .map(lead => {
+        let timeAgo = 'Unknown';
+        if (lead.parsedDate) {
+          const diffMinutes = differenceInMinutes(now, lead.parsedDate);
+          const diffHours = differenceInHours(now, lead.parsedDate);
+          const diffDays = differenceInDays(now, lead.parsedDate);
+          
+          if (diffMinutes < 60) {
+            timeAgo = `${diffMinutes} minutes ago`;
+          } else if (diffHours < 24) {
+            timeAgo = `${diffHours} hours ago`;
+          } else {
+            timeAgo = `${diffDays} days ago`;
+          }
+        }
+        
+        return {
+          name: lead.Name || 'Unknown',
+          preference: lead['Student Preference'] || 'Unknown Program',
+          status: lead.status || 'Unknown',
+          timeAgo,
+        };
+      });
   }, [getFilteredData]);
 
   const CustomLegend = (props: any) => {
     const { payload } = props;
     return (
-      <div className="flex flex-col space-y-1 mr-4">
+      <div className="flex flex-col space-y-2 mr-6">
         {payload.map((entry: any, index: number) => (
-          <div key={index} className="flex items-center space-x-2 text-xs">
+          <div key={index} className="flex items-center space-x-2 text-sm">
             <div 
-              className="w-3 h-3 rounded-sm" 
+              className="w-4 h-4 rounded-sm" 
               style={{ backgroundColor: entry.color }}
             />
-            <span className="text-gray-600">{entry.value}</span>
+            <span className="text-gray-700">{entry.value}</span>
           </div>
         ))}
       </div>
@@ -524,22 +560,21 @@ const OverallLeads = () => {
                 <CardTitle>Lead Status Distribution</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 mr-6">
+                <div className="flex items-center justify-center">
+                  <div className="flex-shrink-0 mr-4">
                     <CustomLegend payload={statusDistribution.map((item, index) => ({
                       value: item.name,
                       color: CHART_COLORS[index % CHART_COLORS.length]
                     }))} />
                   </div>
-                  <ChartContainer config={{}} className="h-64 flex-1">
+                  <ChartContainer config={{}} className="h-80 flex-1">
                     <PieChart>
                       <Pie
                         data={statusDistribution}
                         cx="50%"
                         cy="50%"
-                        outerRadius={80}
+                        outerRadius={100}
                         dataKey="value"
-                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                       >
                         {statusDistribution.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -558,13 +593,13 @@ const OverallLeads = () => {
                 <CardTitle>Leads by Assignee</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-64">
-                  <BarChart data={assigneeData} layout="horizontal">
+                <ChartContainer config={{}} className="h-80">
+                  <BarChart data={assigneeData} layout="horizontal" margin={{ left: 80 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
-                    <YAxis dataKey="name" type="category" width={80} />
+                    <YAxis dataKey="name" type="category" width={100} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="value" fill="#8884d8" />
+                    <Bar dataKey="value" fill="#3B82F6" />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -573,16 +608,22 @@ const OverallLeads = () => {
             {/* Leads by City */}
             <Card>
               <CardHeader>
-                <CardTitle>Leads by City (Top 7)</CardTitle>
+                <CardTitle>Leads by City</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-64">
-                  <BarChart data={cityData}>
+                <ChartContainer config={{}} className="h-80">
+                  <BarChart data={cityData} margin={{ bottom: 60 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                      label={{ value: 'City', position: 'insideBottom', offset: -5 }}
+                    />
+                    <YAxis label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="value" fill="#82ca9d" />
+                    <Bar dataKey="value" fill="#10B981" />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -594,13 +635,37 @@ const OverallLeads = () => {
                 <CardTitle>Top 5 Performing Ads</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-64">
-                  <BarChart data={topAdsData} layout="horizontal">
+                <ChartContainer config={{}} className="h-80">
+                  <BarChart data={topAdsData} layout="horizontal" margin={{ left: 120 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="name" type="category" width={100} />
+                    <XAxis type="number" label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} />
+                    <YAxis dataKey="name" type="category" width={150} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="value" fill="#ffc658" />
+                    <Bar dataKey="value" fill="#F59E0B" />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+
+            {/* Student Preferences */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Student Preferences</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{}} className="h-80">
+                  <BarChart data={studentPreferenceData} margin={{ bottom: 80 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45}
+                      textAnchor="end"
+                      height={100}
+                      label={{ value: 'Student Preferences', position: 'insideBottom', offset: -10 }}
+                    />
+                    <YAxis label={{ value: 'Lead Count', angle: -90, position: 'insideLeft' }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="value" fill="#8B5CF6" />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -608,28 +673,27 @@ const OverallLeads = () => {
 
             {/* Lost Reason Distribution */}
             {lostReasonData.length > 0 && (
-              <Card className="lg:col-span-2">
+              <Card>
                 <CardHeader>
-                  <CardTitle>Leads Lost Reason</CardTitle>
+                  <CardTitle>Lost Leads Reason</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 mr-6">
+                  <div className="flex items-center justify-center">
+                    <div className="flex-shrink-0 mr-4">
                       <CustomLegend payload={lostReasonData.map((item, index) => ({
                         value: item.name,
                         color: CHART_COLORS[index % CHART_COLORS.length]
                       }))} />
                     </div>
-                    <ChartContainer config={{}} className="h-64 flex-1">
+                    <ChartContainer config={{}} className="h-80 flex-1">
                       <PieChart>
                         <Pie
                           data={lostReasonData}
                           cx="50%"
                           cy="50%"
-                          innerRadius={40}
-                          outerRadius={80}
+                          innerRadius={50}
+                          outerRadius={100}
                           dataKey="value"
-                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                         >
                           {lostReasonData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -659,7 +723,7 @@ const OverallLeads = () => {
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">{lead.name}</p>
-                  <p className="text-sm text-gray-600">Interested in {lead.country}</p>
+                  <p className="text-sm text-gray-600">Interested in {lead.preference}</p>
                 </div>
               </div>
               <div className="text-right">
@@ -672,16 +736,16 @@ const OverallLeads = () => {
                 }`}>
                   {lead.status}
                 </span>
-                <p className="text-xs text-gray-500 mt-1">{lead.time}</p>
+                <p className="text-xs text-gray-500 mt-1">{lead.timeAgo}</p>
               </div>
             </div>
           )) : (
             // Fallback data when no file is uploaded
             [
-              { name: 'Sarah Johnson', country: 'Canada', status: 'New', time: '2 minutes ago' },
-              { name: 'Michael Chen', country: 'Australia', status: 'Contacted', time: '15 minutes ago' },
-              { name: 'Emma Rodriguez', country: 'UK', status: 'Follow-up', time: '1 hour ago' },
-              { name: 'David Kim', country: 'Germany', status: 'Qualified', time: '2 hours ago' },
+              { name: 'Sarah Johnson', preference: 'MBA in Canada', status: 'New', timeAgo: '2 minutes ago' },
+              { name: 'Michael Chen', preference: 'MS in Computer Science', status: 'Contacted', timeAgo: '15 minutes ago' },
+              { name: 'Emma Rodriguez', preference: 'Engineering in UK', status: 'Follow-up', timeAgo: '1 hour ago' },
+              { name: 'David Kim', preference: 'Business Analytics', status: 'Qualified', timeAgo: '2 hours ago' },
             ].map((lead, index) => (
               <div key={index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
                 <div className="flex items-center space-x-3">
@@ -692,7 +756,7 @@ const OverallLeads = () => {
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">{lead.name}</p>
-                    <p className="text-sm text-gray-600">Interested in {lead.country}</p>
+                    <p className="text-sm text-gray-600">Interested in {lead.preference}</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -704,7 +768,7 @@ const OverallLeads = () => {
                   }`}>
                     {lead.status}
                   </span>
-                  <p className="text-xs text-gray-500 mt-1">{lead.time}</p>
+                  <p className="text-xs text-gray-500 mt-1">{lead.timeAgo}</p>
                 </div>
               </div>
             ))

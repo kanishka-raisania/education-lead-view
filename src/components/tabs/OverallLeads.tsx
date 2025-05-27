@@ -25,7 +25,7 @@ import {
   Legend 
 } from 'recharts';
 import Papa from 'papaparse';
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, startOfWeek, endOfWeek, subDays, startOfDay, endOfDay, startOfYear, endOfYear } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, startOfWeek, endOfWeek, subDays, startOfDay, endOfDay, startOfYear, endOfYear, getISOWeek, getYear } from 'date-fns';
 
 interface LeadData {
   status: string;
@@ -222,6 +222,25 @@ const OverallLeads = () => {
     ];
   }, [getFilteredData, leadsData]);
 
+  // Better color palette for charts
+  const CHART_COLORS = [
+    '#3B82F6', // Blue
+    '#EF4444', // Red
+    '#10B981', // Green
+    '#F59E0B', // Yellow
+    '#8B5CF6', // Purple
+    '#06B6D4', // Cyan
+    '#F97316', // Orange
+    '#84CC16', // Lime
+    '#EC4899', // Pink
+    '#6B7280', // Gray
+    '#14B8A6', // Teal
+    '#F43F5E', // Rose
+    '#8B5A2B', // Brown
+    '#7C3AED', // Violet
+    '#059669', // Emerald
+  ];
+
   // Chart data processing
   const statusDistribution = useMemo(() => {
     const statusCounts: { [key: string]: number } = {};
@@ -299,29 +318,48 @@ const OverallLeads = () => {
       if (!lead.parsedDate) return;
       
       let timeKey: string;
+      let sortKey: string;
+      
       switch (timeViewMode) {
         case 'Daily':
-          timeKey = format(lead.parsedDate, 'dd-MM-yyyy');
+          timeKey = format(lead.parsedDate, 'dd MMM');
+          sortKey = format(lead.parsedDate, 'yyyy-MM-dd');
           break;
         case 'Weekly':
-          timeKey = format(startOfWeek(lead.parsedDate), 'dd-MM-yyyy');
+          const weekNum = getISOWeek(lead.parsedDate);
+          const year = getYear(lead.parsedDate);
+          timeKey = `Week ${weekNum}`;
+          sortKey = `${year}-W${weekNum.toString().padStart(2, '0')}`;
           break;
         case 'Monthly':
-          timeKey = format(lead.parsedDate, 'MM-yyyy');
+          timeKey = format(lead.parsedDate, 'MMM yyyy');
+          sortKey = format(lead.parsedDate, 'yyyy-MM');
           break;
         case 'Yearly':
           timeKey = format(lead.parsedDate, 'yyyy');
+          sortKey = format(lead.parsedDate, 'yyyy');
           break;
         default:
-          timeKey = format(lead.parsedDate, 'MM-yyyy');
+          timeKey = format(lead.parsedDate, 'MMM yyyy');
+          sortKey = format(lead.parsedDate, 'yyyy-MM');
       }
       
       timeCounts[timeKey] = (timeCounts[timeKey] || 0) + 1;
     });
     
     return Object.entries(timeCounts)
-      .map(([time, count]) => ({ time, count }))
-      .sort((a, b) => a.time.localeCompare(b.time));
+      .map(([time, count]) => ({ 
+        time, 
+        count,
+        sortKey: time // For proper sorting
+      }))
+      .sort((a, b) => {
+        // Simple string comparison for most cases
+        if (timeViewMode === 'Daily') {
+          return new Date(a.time).getTime() - new Date(b.time).getTime();
+        }
+        return a.time.localeCompare(b.time);
+      });
   }, [getFilteredData, timeViewMode]);
 
   const recentLeads = useMemo(() => {
@@ -336,7 +374,22 @@ const OverallLeads = () => {
       }));
   }, [getFilteredData]);
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+  const CustomLegend = (props: any) => {
+    const { payload } = props;
+    return (
+      <div className="flex flex-col space-y-1 mr-4">
+        {payload.map((entry: any, index: number) => (
+          <div key={index} className="flex items-center space-x-2 text-xs">
+            <div 
+              className="w-3 h-3 rounded-sm" 
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="text-gray-600">{entry.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -433,13 +486,32 @@ const OverallLeads = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <ChartContainer config={{}} className="h-64">
+              <ChartContainer config={{}} className="h-80">
                 <LineChart data={leadsOverTimeData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="time" />
-                  <YAxis />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="count" stroke="#8884d8" strokeWidth={2} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis 
+                    dataKey="time" 
+                    tick={{ fontSize: 12 }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={80}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
+                  />
+                  <ChartTooltip 
+                    content={<ChartTooltipContent />}
+                    labelFormatter={(value) => `Period: ${value}`}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="count" 
+                    stroke="#3B82F6" 
+                    strokeWidth={3}
+                    dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6, stroke: '#3B82F6', strokeWidth: 2 }}
+                  />
                 </LineChart>
               </ChartContainer>
             </CardContent>
@@ -452,24 +524,31 @@ const OverallLeads = () => {
                 <CardTitle>Lead Status Distribution</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-64">
-                  <PieChart>
-                    <Pie
-                      data={statusDistribution}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {statusDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Legend />
-                  </PieChart>
-                </ChartContainer>
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 mr-6">
+                    <CustomLegend payload={statusDistribution.map((item, index) => ({
+                      value: item.name,
+                      color: CHART_COLORS[index % CHART_COLORS.length]
+                    }))} />
+                  </div>
+                  <ChartContainer config={{}} className="h-64 flex-1">
+                    <PieChart>
+                      <Pie
+                        data={statusDistribution}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        dataKey="value"
+                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                      >
+                        {statusDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                    </PieChart>
+                  </ChartContainer>
+                </div>
               </CardContent>
             </Card>
 
@@ -531,28 +610,35 @@ const OverallLeads = () => {
             {lostReasonData.length > 0 && (
               <Card className="lg:col-span-2">
                 <CardHeader>
-                  <CardTitle>Lost Leads Reason</CardTitle>
+                  <CardTitle>Leads Lost Reason</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ChartContainer config={{}} className="h-64">
-                    <PieChart>
-                      <Pie
-                        data={lostReasonData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={40}
-                        outerRadius={80}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {lostReasonData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Legend />
-                    </PieChart>
-                  </ChartContainer>
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 mr-6">
+                      <CustomLegend payload={lostReasonData.map((item, index) => ({
+                        value: item.name,
+                        color: CHART_COLORS[index % CHART_COLORS.length]
+                      }))} />
+                    </div>
+                    <ChartContainer config={{}} className="h-64 flex-1">
+                      <PieChart>
+                        <Pie
+                          data={lostReasonData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={40}
+                          outerRadius={80}
+                          dataKey="value"
+                          label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                        >
+                          {lostReasonData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                      </PieChart>
+                    </ChartContainer>
+                  </div>
                 </CardContent>
               </Card>
             )}

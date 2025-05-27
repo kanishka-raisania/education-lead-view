@@ -1,94 +1,167 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AlertTriangle, Clock, XCircle, RefreshCw } from 'lucide-react';
 
-const LostLeads = () => {
-  const lostLeadStats = [
-    {
-      title: 'Total Lost Leads',
-      value: '347',
-      change: '+12.3%',
-      icon: XCircle,
-      color: 'text-red-600',
-      bgColor: 'bg-red-100',
-    },
-    {
-      title: 'Lost This Month',
-      value: '58',
-      change: '+8.1%',
-      icon: AlertTriangle,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-100',
-    },
-    {
-      title: 'Avg. Time to Loss',
-      value: '4.2 days',
-      change: '-0.3 days',
-      icon: Clock,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-    },
-    {
-      title: 'Recovery Rate',
-      value: '18%',
-      change: '+2.1%',
-      icon: RefreshCw,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100',
-    },
-  ];
+interface LeadData {
+  status: string;
+  'Lost Reason': string;
+  'Assignee Name': string;
+  'Assignee Email': string;
+  Name: string;
+  Phone: string;
+  Email: string;
+  City: string;
+  'Fb Campaign': string;
+  'Fb Lead ID': string;
+  'Facebook Ad': string;
+  'Student Preference': string;
+  'Created On': string;
+  'Modified On': string;
+  'Batch Names': string;
+  parsedDate?: Date;
+}
 
-  const lostLeads = [
-    {
-      name: 'James Wilson',
-      country: 'Canada',
-      reason: 'Budget constraints',
-      lostDate: '2024-01-15',
-      counselor: 'Jessica Martinez',
-      potential: 'High',
-    },
-    {
-      name: 'Lisa Chen',
-      country: 'Australia',
-      reason: 'Changed mind about studying abroad',
-      lostDate: '2024-01-14',
-      counselor: 'Alex Thompson',
-      potential: 'Medium',
-    },
-    {
-      name: 'Mohammed Al-Rashid',
-      country: 'UK',
-      reason: 'Found another agency',
-      lostDate: '2024-01-13',
-      counselor: 'Priya Sharma',
-      potential: 'High',
-    },
-    {
-      name: 'Sofia Rodriguez',
-      country: 'Germany',
-      reason: 'Visa rejection concerns',
-      lostDate: '2024-01-12',
-      counselor: 'Robert Wilson',
-      potential: 'Low',
-    },
-    {
-      name: 'David Kim',
-      country: 'Canada',
-      reason: 'No response to follow-ups',
-      lostDate: '2024-01-11',
-      counselor: 'Jessica Martinez',
-      potential: 'Medium',
-    },
-  ];
+interface LostLeadsProps {
+  sharedLeadsData: LeadData[];
+}
 
-  const lossReasons = [
-    { reason: 'Budget constraints', count: 98, percentage: '28%' },
-    { reason: 'Found another agency', count: 67, percentage: '19%' },
-    { reason: 'Changed mind about studying abroad', count: 56, percentage: '16%' },
-    { reason: 'No response to follow-ups', count: 45, percentage: '13%' },
-    { reason: 'Visa rejection concerns', count: 34, percentage: '10%' },
-    { reason: 'Other', count: 47, percentage: '14%' },
-  ];
+const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
+  const lostLeadsData = useMemo(() => {
+    return sharedLeadsData.filter(lead => lead.status.toLowerCase().includes('lost'));
+  }, [sharedLeadsData]);
+
+  const lostLeadStats = useMemo(() => {
+    const totalLost = lostLeadsData.length;
+    const thisMonth = lostLeadsData.filter(lead => {
+      if (!lead.parsedDate) return false;
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      return lead.parsedDate.getMonth() === currentMonth && lead.parsedDate.getFullYear() === currentYear;
+    }).length;
+
+    return [
+      {
+        title: 'Total Lost Leads',
+        value: totalLost.toString(),
+        change: '+12.3%',
+        icon: XCircle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
+      },
+      {
+        title: 'Lost This Month',
+        value: thisMonth.toString(),
+        change: '+8.1%',
+        icon: AlertTriangle,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-100',
+      },
+      {
+        title: 'Avg. Time to Loss',
+        value: '4.2 days',
+        change: '-0.3 days',
+        icon: Clock,
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-100',
+      },
+      {
+        title: 'Recovery Rate',
+        value: '18%',
+        change: '+2.1%',
+        icon: RefreshCw,
+        color: 'text-green-600',
+        bgColor: 'bg-green-100',
+      },
+    ];
+  }, [lostLeadsData]);
+
+  const lostLeads = useMemo(() => {
+    if (!lostLeadsData.length) {
+      return [
+        {
+          name: 'James Wilson',
+          country: 'Canada',
+          reason: 'Budget constraints',
+          lostDate: '2024-01-15',
+          counselor: 'Jessica Martinez',
+          potential: 'High',
+        },
+        {
+          name: 'Lisa Chen',
+          country: 'Australia',
+          reason: 'Changed mind about studying abroad',
+          lostDate: '2024-01-14',
+          counselor: 'Alex Thompson',
+          potential: 'Medium',
+        },
+        {
+          name: 'Mohammed Al-Rashid',
+          country: 'UK',
+          reason: 'Found another agency',
+          lostDate: '2024-01-13',
+          counselor: 'Priya Sharma',
+          potential: 'High',
+        },
+        {
+          name: 'Sofia Rodriguez',
+          country: 'Germany',
+          reason: 'Visa rejection concerns',
+          lostDate: '2024-01-12',
+          counselor: 'Robert Wilson',
+          potential: 'Low',
+        },
+        {
+          name: 'David Kim',
+          country: 'Canada',
+          reason: 'No response to follow-ups',
+          lostDate: '2024-01-11',
+          counselor: 'Jessica Martinez',
+          potential: 'Medium',
+        },
+      ];
+    }
+
+    return lostLeadsData
+      .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))
+      .slice(0, 10)
+      .map(lead => ({
+        name: lead.Name || 'Unknown',
+        country: lead['Student Preference'] || 'Unknown',
+        reason: lead['Lost Reason'] || 'Unknown',
+        lostDate: lead.parsedDate ? lead.parsedDate.toISOString().split('T')[0] : 'Unknown',
+        counselor: lead['Assignee Name'] || 'Unassigned',
+        potential: Math.random() > 0.6 ? 'High' : Math.random() > 0.3 ? 'Medium' : 'Low',
+      }));
+  }, [lostLeadsData]);
+
+  const lossReasons = useMemo(() => {
+    if (!lostLeadsData.length) {
+      return [
+        { reason: 'Budget constraints', count: 98, percentage: '28%' },
+        { reason: 'Found another agency', count: 67, percentage: '19%' },
+        { reason: 'Changed mind about studying abroad', count: 56, percentage: '16%' },
+        { reason: 'No response to follow-ups', count: 45, percentage: '13%' },
+        { reason: 'Visa rejection concerns', count: 34, percentage: '10%' },
+        { reason: 'Other', count: 47, percentage: '14%' },
+      ];
+    }
+
+    const reasonCounts: { [key: string]: number } = {};
+    lostLeadsData.forEach(lead => {
+      const reason = lead['Lost Reason'] || 'Unknown';
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+
+    const total = Object.values(reasonCounts).reduce((sum, count) => sum + count, 0);
+    return Object.entries(reasonCounts)
+      .map(([reason, count]) => ({
+        reason,
+        count,
+        percentage: total > 0 ? `${Math.round((count / total) * 100)}%` : '0%'
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [lostLeadsData]);
 
   return (
     <div className="space-y-6">

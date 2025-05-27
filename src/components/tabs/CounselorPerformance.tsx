@@ -23,6 +23,26 @@ import {
   Line, 
   ResponsiveContainer
 } from 'recharts';
+import { format, startOfMonth, endOfMonth, isWithinInterval, getISOWeek } from 'date-fns';
+
+interface LeadData {
+  status: string;
+  'Lost Reason': string;
+  'Assignee Name': string;
+  'Assignee Email': string;
+  Name: string;
+  Phone: string;
+  Email: string;
+  City: string;
+  'Fb Campaign': string;
+  'Fb Lead ID': string;
+  'Facebook Ad': string;
+  'Student Preference': string;
+  'Created On': string;
+  'Modified On': string;
+  'Batch Names': string;
+  parsedDate?: Date;
+}
 
 interface CounselorData {
   assigneeName: string;
@@ -35,72 +55,89 @@ interface CounselorData {
   conversionRate: number;
 }
 
-const CounselorPerformance = () => {
+interface CounselorPerformanceProps {
+  sharedLeadsData: LeadData[];
+}
+
+const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) => {
   const [timeFilter, setTimeFilter] = useState('Monthly');
   const [selectedCounselor, setSelectedCounselor] = useState<string | null>(null);
 
-  // Mock data - in real implementation, this would come from uploaded file
-  const mockCounselors: CounselorData[] = [
-    {
-      assigneeName: 'Jessica Martinez',
-      totalLeads: 58,
-      lostLeads: 8,
-      docsReceived: 45,
-      applicationFiled: 32,
-      depositPaid: 28,
-      converted: 45,
-      conversionRate: 78,
-    },
-    {
-      assigneeName: 'Alex Thompson', 
-      totalLeads: 54,
-      lostLeads: 12,
-      docsReceived: 38,
-      applicationFiled: 25,
-      depositPaid: 22,
-      converted: 38,
-      conversionRate: 71,
-    },
-    {
-      assigneeName: 'Priya Sharma',
-      totalLeads: 49,
-      lostLeads: 5,
-      docsReceived: 42,
-      applicationFiled: 35,
-      depositPaid: 30,
-      converted: 42,
-      conversionRate: 85,
-    },
-    {
-      assigneeName: 'Robert Wilson',
-      totalLeads: 51,
-      lostLeads: 14,
-      docsReceived: 35,
-      applicationFiled: 22,
-      depositPaid: 18,
-      converted: 35,
-      conversionRate: 68,
-    },
-  ];
+  // Process data from shared leads data
+  const counselorsData: CounselorData[] = useMemo(() => {
+    if (!sharedLeadsData.length) return [];
+
+    const counselorStats: { [key: string]: any } = {};
+    
+    sharedLeadsData.forEach(lead => {
+      const assignee = lead['Assignee Name'];
+      if (!assignee || assignee.trim() === '') return;
+      
+      if (!counselorStats[assignee]) {
+        counselorStats[assignee] = {
+          assigneeName: assignee,
+          totalLeads: 0,
+          lostLeads: 0,
+          docsReceived: 0,
+          applicationFiled: 0,
+          depositPaid: 0,
+          converted: 0,
+          conversionRate: 0
+        };
+      }
+      
+      const stats = counselorStats[assignee];
+      stats.totalLeads++;
+      
+      const status = lead.status.toLowerCase();
+      
+      if (status.includes('lost')) {
+        stats.lostLeads++;
+      }
+      if (status.includes('docs received') || status.includes('documentation')) {
+        stats.docsReceived++;
+      }
+      if (status.includes('application filed') || status.includes('applied')) {
+        stats.applicationFiled++;
+      }
+      if (status.includes('deposit') || status.includes('fee paid')) {
+        stats.depositPaid++;
+      }
+      if (status.includes('registered to university') || status.includes('enrolled')) {
+        stats.converted++;
+      }
+    });
+    
+    // Calculate conversion rates
+    Object.values(counselorStats).forEach((counselor: any) => {
+      counselor.conversionRate = counselor.totalLeads > 0 
+        ? Math.round((counselor.converted / counselor.totalLeads) * 100)
+        : 0;
+    });
+    
+    return Object.values(counselorStats);
+  }, [sharedLeadsData]);
 
   const topPerformer = useMemo(() => {
-    return mockCounselors.reduce((prev, current) => 
+    if (!counselorsData.length) return null;
+    return counselorsData.reduce((prev, current) => 
       (prev.conversionRate > current.conversionRate) ? prev : current
     );
-  }, [mockCounselors]);
+  }, [counselorsData]);
 
   const averageConversionRate = useMemo(() => {
-    const total = mockCounselors.reduce((sum, counselor) => sum + counselor.conversionRate, 0);
-    return (total / mockCounselors.length).toFixed(1);
-  }, [mockCounselors]);
+    if (!counselorsData.length) return '0';
+    const total = counselorsData.reduce((sum, counselor) => sum + counselor.conversionRate, 0);
+    return (total / counselorsData.length).toFixed(1);
+  }, [counselorsData]);
 
   const totalDeposits = useMemo(() => {
-    return mockCounselors.reduce((sum, counselor) => sum + counselor.depositPaid, 0);
-  }, [mockCounselors]);
+    return counselorsData.reduce((sum, counselor) => sum + counselor.depositPaid, 0);
+  }, [counselorsData]);
 
   const currentCounselor = useMemo(() => {
-    return mockCounselors.find(c => c.assigneeName === selectedCounselor);
-  }, [selectedCounselor, mockCounselors]);
+    return counselorsData.find(c => c.assigneeName === selectedCounselor);
+  }, [selectedCounselor, counselorsData]);
 
   // Chart colors
   const CHART_COLORS = [
@@ -108,35 +145,117 @@ const CounselorPerformance = () => {
     '#06B6D4', '#F97316', '#84CC16', '#EC4899', '#6B7280'
   ];
 
-  // Mock data for individual counselor charts
-  const leadsOverTimeData = [
-    { time: 'Jan 2024', count: 12 },
-    { time: 'Feb 2024', count: 15 },
-    { time: 'Mar 2024', count: 18 },
-    { time: 'Apr 2024', count: 14 },
-    { time: 'May 2024', count: 20 },
-  ];
+  // Mock data for individual counselor charts (would be filtered by counselor in real implementation)
+  const leadsOverTimeData = useMemo(() => {
+    if (!selectedCounselor || !sharedLeadsData.length) {
+      return [
+        { time: 'Jan 2024', count: 12 },
+        { time: 'Feb 2024', count: 15 },
+        { time: 'Mar 2024', count: 18 },
+        { time: 'Apr 2024', count: 14 },
+        { time: 'May 2024', count: 20 },
+      ];
+    }
 
-  const funnelData = [
+    const timeCounts: { [key: string]: { count: number; sortKey: string } } = {};
+    const counselorLeads = sharedLeadsData.filter(lead => lead['Assignee Name'] === selectedCounselor);
+    
+    counselorLeads.forEach(lead => {
+      if (!lead.parsedDate) return;
+      
+      let timeKey: string;
+      let sortKey: string;
+      
+      switch (timeFilter) {
+        case 'Daily':
+          timeKey = format(lead.parsedDate, 'dd MMM');
+          sortKey = format(lead.parsedDate, 'yyyy-MM-dd');
+          break;
+        case 'Weekly':
+          const weekNum = getISOWeek(lead.parsedDate);
+          timeKey = `Week ${weekNum}`;
+          sortKey = `${format(lead.parsedDate, 'yyyy-MM')}-W${weekNum.toString().padStart(2, '0')}`;
+          break;
+        case 'Monthly':
+          timeKey = format(lead.parsedDate, 'MMM yyyy');
+          sortKey = format(lead.parsedDate, 'yyyy-MM');
+          break;
+        case 'Yearly':
+          timeKey = format(lead.parsedDate, 'yyyy');
+          sortKey = format(lead.parsedDate, 'yyyy');
+          break;
+        default:
+          timeKey = format(lead.parsedDate, 'MMM yyyy');
+          sortKey = format(lead.parsedDate, 'yyyy-MM');
+      }
+      
+      if (!timeCounts[timeKey]) {
+        timeCounts[timeKey] = { count: 0, sortKey };
+      }
+      timeCounts[timeKey].count++;
+    });
+    
+    return Object.entries(timeCounts)
+      .map(([time, data]) => ({ 
+        time, 
+        count: data.count,
+        sortKey: data.sortKey
+      }))
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [selectedCounselor, sharedLeadsData, timeFilter]);
+
+  const funnelData = useMemo(() => [
     { stage: 'Docs Received', count: currentCounselor?.docsReceived || 42 },
     { stage: 'Application Filed', count: currentCounselor?.applicationFiled || 35 },
     { stage: 'Deposit Paid', count: currentCounselor?.depositPaid || 30 },
     { stage: 'Registered', count: currentCounselor?.converted || 42 },
-  ];
+  ], [currentCounselor]);
 
-  const dnpData = [
-    { name: 'DNP1', value: 8 },
-    { name: 'DNP2', value: 12 },
-    { name: 'DNP3', value: 6 },
-    { name: 'DNP4', value: 4 },
-  ];
+  const dnpData = useMemo(() => {
+    if (!selectedCounselor || !sharedLeadsData.length) {
+      return [
+        { name: 'DNP1', value: 8 },
+        { name: 'DNP2', value: 12 },
+        { name: 'DNP3', value: 6 },
+        { name: 'DNP4', value: 4 },
+      ];
+    }
 
-  const lostReasonData = [
-    { name: 'Price too high', value: 3 },
-    { name: 'Changed mind', value: 2 },
-    { name: 'Found alternative', value: 2 },
-    { name: 'Family issues', value: 1 },
-  ];
+    const dnpCounts: { [key: string]: number } = { DNP1: 0, DNP2: 0, DNP3: 0, DNP4: 0 };
+    const counselorLeads = sharedLeadsData.filter(lead => lead['Assignee Name'] === selectedCounselor);
+    
+    counselorLeads.forEach(lead => {
+      const status = lead.status.toUpperCase();
+      if (status.includes('DNP1')) dnpCounts.DNP1++;
+      else if (status.includes('DNP2')) dnpCounts.DNP2++;
+      else if (status.includes('DNP3')) dnpCounts.DNP3++;
+      else if (status.includes('DNP4')) dnpCounts.DNP4++;
+    });
+    
+    return Object.entries(dnpCounts).map(([name, value]) => ({ name, value }));
+  }, [selectedCounselor, sharedLeadsData]);
+
+  const lostReasonData = useMemo(() => {
+    if (!selectedCounselor || !sharedLeadsData.length) {
+      return [
+        { name: 'Price too high', value: 3 },
+        { name: 'Changed mind', value: 2 },
+        { name: 'Found alternative', value: 2 },
+        { name: 'Family issues', value: 1 },
+      ];
+    }
+
+    const reasonCounts: { [key: string]: number } = {};
+    const counselorLeads = sharedLeadsData
+      .filter(lead => lead['Assignee Name'] === selectedCounselor && lead.status.toLowerCase().includes('lost'));
+    
+    counselorLeads.forEach(lead => {
+      const reason = lead['Lost Reason'] || 'Unknown';
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+    
+    return Object.entries(reasonCounts).map(([name, value]) => ({ name, value }));
+  }, [selectedCounselor, sharedLeadsData]);
 
   const CustomLegend = (props: any) => {
     const { payload } = props;
@@ -281,22 +400,23 @@ const CounselorPerformance = () => {
               <CardTitle>Lost Reasons</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0">
+              <div className="flex items-center gap-6">
+                <div className="flex-shrink-0 w-40">
                   <CustomLegend payload={lostReasonData.map((item, index) => ({
                     value: item.name,
                     color: CHART_COLORS[index % CHART_COLORS.length]
                   }))} />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-h-0">
                   <ChartContainer config={{}} className="h-80">
-                    <PieChart>
+                    <PieChart width={320} height={320}>
                       <Pie
                         data={lostReasonData}
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
                         dataKey="value"
+                        label={false}
                       >
                         {lostReasonData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -343,7 +463,7 @@ const CounselorPerformance = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              {mockCounselors.map((counselor) => (
+              {counselorsData.map((counselor) => (
                 <DropdownMenuItem 
                   key={counselor.assigneeName} 
                   onClick={() => setSelectedCounselor(counselor.assigneeName)}
@@ -366,8 +486,8 @@ const CounselorPerformance = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Top Performer</p>
-                <p className="text-xl font-bold text-gray-900">{topPerformer.assigneeName}</p>
-                <p className="text-sm text-green-600">{topPerformer.conversionRate}% conversion rate</p>
+                <p className="text-xl font-bold text-gray-900">{topPerformer?.assigneeName || 'No data'}</p>
+                <p className="text-sm text-green-600">{topPerformer?.conversionRate || 0}% conversion rate</p>
               </div>
             </div>
           </CardContent>
@@ -435,7 +555,7 @@ const CounselorPerformance = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {mockCounselors.map((counselor, index) => (
+                {counselorsData.map((counselor, index) => (
                   <tr 
                     key={index} 
                     className="hover:bg-gray-50 cursor-pointer"

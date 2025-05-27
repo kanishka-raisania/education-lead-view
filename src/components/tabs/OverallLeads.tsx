@@ -45,11 +45,18 @@ interface LeadData {
   parsedDate?: Date;
 }
 
-const OverallLeads = () => {
+interface OverallLeadsProps {
+  sharedLeadsData: LeadData[];
+  setSharedLeadsData: (data: LeadData[]) => void;
+}
+
+const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [leadsData, setLeadsData] = useState<LeadData[]>([]);
   const [timeFilter, setTimeFilter] = useState('All Time');
   const [timeViewMode, setTimeViewMode] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Yearly'>('Monthly');
+
+  // Use shared data instead of local state
+  const leadsData = sharedLeadsData;
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -96,7 +103,7 @@ const OverallLeads = () => {
             })
             .filter(row => row.parsedDate); // Only keep rows with valid dates
           
-          setLeadsData(processedData);
+          setSharedLeadsData(processedData);
           console.log('Processed data:', processedData);
         },
         error: (error) => {
@@ -262,7 +269,7 @@ const OverallLeads = () => {
     });
     
     return Object.entries(assigneeCounts)
-      .map(([assignee, count]) => ({ name: assignee, leads: count }))
+      .map(([assignee, leads]) => ({ name: assignee, leads }))
       .sort((a, b) => b.leads - a.leads)
       .slice(0, 10);
   }, [getFilteredData]);
@@ -292,7 +299,7 @@ const OverallLeads = () => {
     });
     
     return Object.entries(adCounts)
-      .map(([ad, count]) => ({ name: ad, leads: count }))
+      .map(([ad, leads]) => ({ name: ad, leads }))
       .sort((a, b) => b.leads - a.leads)
       .slice(0, 5);
   }, [getFilteredData]);
@@ -392,38 +399,39 @@ const OverallLeads = () => {
 
   const recentLeads = useMemo(() => {
     const now = new Date();
+    
+    const formatTimeAgo = (createdDate: Date): string => {
+      const diffMinutes = differenceInMinutes(now, createdDate);
+      const diffHours = differenceInHours(now, createdDate);
+      const diffDays = differenceInDays(now, createdDate);
+      
+      if (diffMinutes < 1) {
+        return 'Just now';
+      } else if (diffMinutes < 60) {
+        return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+      } else if (diffHours < 24) {
+        return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+      } else {
+        return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+      }
+    };
+    
     return getFilteredData
+      .filter(lead => lead.parsedDate)
       .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))
       .slice(0, 5)
-      .map(lead => {
-        let timeAgo = 'Unknown';
-        if (lead.parsedDate) {
-          const diffMinutes = differenceInMinutes(now, lead.parsedDate);
-          const diffHours = differenceInHours(now, lead.parsedDate);
-          const diffDays = differenceInDays(now, lead.parsedDate);
-          
-          if (diffMinutes < 60) {
-            timeAgo = `${diffMinutes} minutes ago`;
-          } else if (diffHours < 24) {
-            timeAgo = `${diffHours} hours ago`;
-          } else {
-            timeAgo = `${diffDays} days ago`;
-          }
-        }
-        
-        return {
-          name: lead.Name || 'Unknown',
-          preference: lead['Student Preference'] || 'Unknown Program',
-          status: lead.status || 'Unknown',
-          timeAgo,
-        };
-      });
+      .map(lead => ({
+        name: lead.Name || 'Unknown',
+        preference: lead['Student Preference'] || 'Unknown Program',
+        status: lead.status || 'Unknown',
+        timeAgo: lead.parsedDate ? formatTimeAgo(lead.parsedDate) : 'Unknown',
+      }));
   }, [getFilteredData]);
 
   const CustomLegend = (props: any) => {
     const { payload } = props;
     return (
-      <div className="flex flex-col space-y-2 text-sm max-w-48">
+      <div className="flex flex-col space-y-1 text-sm max-w-48">
         {payload.map((entry: any, index: number) => (
           <div key={index} className="flex items-center space-x-2">
             <div 
@@ -570,22 +578,24 @@ const OverallLeads = () => {
                 <CardTitle>Lead Status Distribution</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0">
+                <div className="flex items-center gap-6">
+                  <div className="flex-shrink-0 w-40">
                     <CustomLegend payload={statusDistribution.map((item, index) => ({
                       value: item.name,
                       color: CHART_COLORS[index % CHART_COLORS.length]
                     }))} />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-h-0">
                     <ChartContainer config={{}} className="h-80">
-                      <PieChart>
+                      <PieChart width={320} height={320}>
                         <Pie
                           data={statusDistribution}
                           cx="50%"
                           cy="50%"
-                          outerRadius={100}
+                          innerRadius={40}
+                          outerRadius={120}
                           dataKey="value"
+                          label={false}
                         >
                           {statusDistribution.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
@@ -606,12 +616,34 @@ const OverallLeads = () => {
               </CardHeader>
               <CardContent>
                 <ChartContainer config={{}} className="h-80">
-                  <BarChart data={assigneeData} layout="horizontal" margin={{ left: 80 }}>
+                  <BarChart 
+                    data={assigneeData} 
+                    layout="horizontal" 
+                    margin={{ left: 100, right: 20, top: 20, bottom: 20 }}
+                    width={500}
+                    height={320}
+                  >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} />
-                    <YAxis dataKey="name" type="category" width={100} />
+                    <XAxis 
+                      type="number" 
+                      tick={{ fontSize: 12 }}
+                      label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} 
+                    />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={120} 
+                      tick={{ fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="leads" fill="#3B82F6" />
+                    <Bar 
+                      dataKey="leads" 
+                      fill="#3B82F6" 
+                      radius={[0, 4, 4, 0]}
+                      minPointSize={5}
+                    />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -648,12 +680,34 @@ const OverallLeads = () => {
               </CardHeader>
               <CardContent>
                 <ChartContainer config={{}} className="h-80">
-                  <BarChart data={topAdsData} layout="horizontal" margin={{ left: 120 }}>
+                  <BarChart 
+                    data={topAdsData} 
+                    layout="horizontal" 
+                    margin={{ left: 120, right: 20, top: 20, bottom: 20 }}
+                    width={500}
+                    height={320}
+                  >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} />
-                    <YAxis dataKey="name" type="category" width={150} />
+                    <XAxis 
+                      type="number" 
+                      tick={{ fontSize: 12 }}
+                      label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} 
+                    />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={150} 
+                      tick={{ fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="leads" fill="#F59E0B" />
+                    <Bar 
+                      dataKey="leads" 
+                      fill="#F59E0B" 
+                      radius={[0, 4, 4, 0]}
+                      minPointSize={5}
+                    />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
@@ -690,23 +744,24 @@ const OverallLeads = () => {
                   <CardTitle>Lost Leads Reason</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0">
+                  <div className="flex items-center gap-6">
+                    <div className="flex-shrink-0 w-40">
                       <CustomLegend payload={lostReasonData.map((item, index) => ({
                         value: item.name,
                         color: CHART_COLORS[index % CHART_COLORS.length]
                       }))} />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-h-0">
                       <ChartContainer config={{}} className="h-80">
-                        <PieChart>
+                        <PieChart width={320} height={320}>
                           <Pie
                             data={lostReasonData}
                             cx="50%"
                             cy="50%"
                             innerRadius={50}
-                            outerRadius={100}
+                            outerRadius={120}
                             dataKey="value"
+                            label={false}
                           >
                             {lostReasonData.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />

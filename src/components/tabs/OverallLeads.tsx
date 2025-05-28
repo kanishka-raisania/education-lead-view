@@ -1,26 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-import { Bar } from 'react-chartjs-2';
 import { FileUp, Users, TrendingUp, LayoutDashboard, User } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../ui/chart';
-import { PieChart, Pie, Cell, LineChart, Line, CartesianGrid, XAxis, YAxis } from 'recharts';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
+import { PieChart, Pie, Cell, LineChart, Line, CartesianGrid, XAxis, YAxis, BarChart, Bar } from 'recharts';
 
 interface LeadData {
   status: string;
@@ -198,29 +179,64 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     },
   ];
 
-  const recentLeadsActivity = [
-    {
-      name: 'John Doe',
-      action: 'Sent an email',
-      time: '5 minutes ago',
-      status: 'Replied',
-      statusColor: 'bg-green-100 text-green-800',
-    },
-    {
-      name: 'Jane Smith',
-      action: 'Scheduled a call',
-      time: '30 minutes ago',
-      status: 'Pending',
-      statusColor: 'bg-yellow-100 text-yellow-800',
-    },
-    {
-      name: 'Alice Johnson',
-      action: 'Downloaded brochure',
-      time: '1 hour ago',
-      status: 'Completed',
-      statusColor: 'bg-blue-100 text-blue-800',
-    },
-  ];
+  // Get formatted recent leads activity
+  const recentLeadsActivity = useMemo(() => {
+    if (processedData.length === 0) {
+      return [
+        {
+          name: 'John Doe',
+          action: 'Sent an email',
+          time: '5 minutes ago',
+          status: 'Replied',
+          statusColor: 'bg-green-100 text-green-800',
+        },
+        {
+          name: 'Jane Smith',
+          action: 'Scheduled a call',
+          time: '30 minutes ago',
+          status: 'Pending',
+          statusColor: 'bg-yellow-100 text-yellow-800',
+        },
+        {
+          name: 'Alice Johnson',
+          action: 'Downloaded brochure',
+          time: '1 hour ago',
+          status: 'Completed',
+          statusColor: 'bg-blue-100 text-blue-800',
+        },
+      ];
+    }
+
+    const formatTimeAgo = (dateString: string) => {
+      try {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMinutes < 1) return 'Just now';
+        if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
+        if (diffHours < 24) return `${diffHours} hours ago`;
+        return `${diffDays} days ago`;
+      } catch (error) {
+        return 'Unknown time';
+      }
+    };
+
+    return processedData
+      .slice(0, 3)
+      .map(lead => ({
+        name: lead.Name,
+        action: 'Uploaded data',
+        time: formatTimeAgo(lead['Created On']),
+        status: lead.status || 'Unknown',
+        statusColor: lead.status === 'Replied' ? 'bg-green-100 text-green-800' :
+                     lead.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                     'bg-blue-100 text-blue-800',
+      }));
+  }, [processedData]);
 
   return (
     <div className="space-y-6">

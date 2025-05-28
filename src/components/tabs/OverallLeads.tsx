@@ -270,12 +270,12 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     
     return Object.entries(assigneeCounts)
       .map(([assignee, leads]) => ({ 
-        name: assignee.length > 20 ? assignee.substring(0, 20) + '...' : assignee, 
+        name: assignee.length > 15 ? assignee.substring(0, 15) + '...' : assignee, 
         leads,
         fullName: assignee 
       }))
       .sort((a, b) => b.leads - a.leads)
-      .slice(0, 10);
+      .slice(0, 8);
   }, [getFilteredData]);
 
   const cityData = useMemo(() => {
@@ -304,12 +304,12 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     
     return Object.entries(adCounts)
       .map(([ad, leads]) => ({ 
-        name: ad.length > 25 ? ad.substring(0, 25) + '...' : ad, 
+        name: ad.length > 20 ? ad.substring(0, 20) + '...' : ad, 
         leads,
         fullName: ad 
       }))
       .sort((a, b) => b.leads - a.leads)
-      .slice(0, 5);
+      .slice(0, 6);
   }, [getFilteredData]);
 
   const studentPreferenceData = useMemo(() => {
@@ -620,25 +620,23 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
                 <CardTitle>Leads by Assignee</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-64">
+                <ChartContainer config={{}} className="h-80">
                   <BarChart 
                     data={assigneeData} 
-                    layout="horizontal"
-                    margin={{ left: 80, right: 20, top: 10, bottom: 10 }}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis 
-                      type="number" 
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
+                      dataKey="name" 
+                      angle={-45}
+                      textAnchor="end"
+                      height={100}
+                      interval={0}
+                      tick={{ fontSize: 11 }}
                     />
                     <YAxis 
-                      dataKey="name" 
-                      type="category" 
-                      width={100} 
-                      tick={{ fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
+                      tick={{ fontSize: 12 }}
+                      label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
                     />
                     <ChartTooltip 
                       content={<ChartTooltipContent />}
@@ -650,8 +648,8 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
                     <Bar 
                       dataKey="leads" 
                       fill="#3B82F6" 
-                      radius={[0, 4, 4, 0]}
-                      minPointSize={2}
+                      radius={[4, 4, 0, 0]}
+                      minPointSize={5}
                     />
                   </BarChart>
                 </ChartContainer>
@@ -683,28 +681,26 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
 
             <Card>
               <CardHeader>
-                <CardTitle>Top 5 Performing Ads</CardTitle>
+                <CardTitle>Top Performing Ads</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-64">
+                <ChartContainer config={{}} className="h-80">
                   <BarChart 
                     data={topAdsData} 
-                    layout="horizontal"
-                    margin={{ left: 120, right: 20, top: 10, bottom: 10 }}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis 
-                      type="number" 
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
+                      dataKey="name" 
+                      angle={-45}
+                      textAnchor="end"
+                      height={120}
+                      interval={0}
+                      tick={{ fontSize: 10 }}
                     />
                     <YAxis 
-                      dataKey="name" 
-                      type="category" 
-                      width={140} 
-                      tick={{ fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
+                      tick={{ fontSize: 12 }}
+                      label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
                     />
                     <ChartTooltip 
                       content={<ChartTooltipContent />}
@@ -716,8 +712,8 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
                     <Bar 
                       dataKey="leads" 
                       fill="#F59E0B" 
-                      radius={[0, 4, 4, 0]}
-                      minPointSize={2}
+                      radius={[4, 4, 0, 0]}
+                      minPointSize={5}
                     />
                   </BarChart>
                 </ChartContainer>

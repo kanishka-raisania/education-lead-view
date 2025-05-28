@@ -620,17 +620,17 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
                 <CardTitle>Leads by Assignee</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-80">
+                <ChartContainer config={{}} className="h-96">
                   <BarChart 
                     data={assigneeData} 
-                    margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 120 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis 
                       dataKey="name" 
                       angle={-45}
                       textAnchor="end"
-                      height={100}
+                      height={140}
                       interval={0}
                       tick={{ fontSize: 11 }}
                     />
@@ -684,17 +684,17 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
                 <CardTitle>Top Performing Ads</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-80">
+                <ChartContainer config={{}} className="h-96">
                   <BarChart 
                     data={topAdsData} 
-                    margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 140 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis 
                       dataKey="name" 
                       angle={-45}
                       textAnchor="end"
-                      height={120}
+                      height={160}
                       interval={0}
                       tick={{ fontSize: 10 }}
                     />

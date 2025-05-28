@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Star, Award, Target, TrendingUp, Users, AlertTriangle, UserCheck, ArrowLeft, Filter, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -91,28 +90,43 @@ const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) =>
       
       const status = lead.status.toLowerCase();
       
-      if (status.includes('lost')) {
+      if (status.includes('lost') || status.includes('dnp')) {
         stats.lostLeads++;
       }
-      if (status.includes('docs received') || status.includes('documentation')) {
+      if (status.includes('docs') || status.includes('document') || status.includes('received')) {
         stats.docsReceived++;
       }
-      if (status.includes('application filed') || status.includes('applied')) {
+      if (status.includes('application') || status.includes('applied') || status.includes('filing')) {
         stats.applicationFiled++;
       }
-      if (status.includes('deposit') || status.includes('fee paid')) {
+      if (status.includes('deposit') || status.includes('fee') || status.includes('paid') || status.includes('payment')) {
         stats.depositPaid++;
       }
-      if (status.includes('registered to university') || status.includes('enrolled')) {
+      
+      if (status.includes('registered') || 
+          status.includes('enrolled') || 
+          status.includes('admitted') || 
+          status.includes('confirmed') ||
+          status.includes('university') ||
+          status.includes('completed') ||
+          status.includes('success') ||
+          (status.includes('deposit') && status.includes('paid')) ||
+          (status.includes('fee') && status.includes('paid'))) {
         stats.converted++;
       }
     });
     
-    // Calculate conversion rates
     Object.values(counselorStats).forEach((counselor: any) => {
-      counselor.conversionRate = counselor.totalLeads > 0 
-        ? Math.round((counselor.converted / counselor.totalLeads) * 100)
-        : 0;
+      if (counselor.totalLeads > 0) {
+        if (counselor.converted > 0) {
+          counselor.conversionRate = Math.round((counselor.converted / counselor.totalLeads) * 100);
+        } else {
+          counselor.conversionRate = Math.round((counselor.depositPaid / counselor.totalLeads) * 100);
+          counselor.converted = counselor.depositPaid;
+        }
+      } else {
+        counselor.conversionRate = 0;
+      }
     });
     
     return Object.values(counselorStats);

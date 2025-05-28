@@ -205,19 +205,19 @@ const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) =>
   }, [selectedCounselor, sharedLeadsData, timeFilter]);
 
   const funnelData = useMemo(() => [
-    { stage: 'Docs Received', count: currentCounselor?.docsReceived || 42 },
-    { stage: 'Application Filed', count: currentCounselor?.applicationFiled || 35 },
-    { stage: 'Deposit Paid', count: currentCounselor?.depositPaid || 30 },
-    { stage: 'Registered', count: currentCounselor?.converted || 42 },
+    { stage: 'Docs Received', count: currentCounselor?.docsReceived || 0 },
+    { stage: 'Application Filed', count: currentCounselor?.applicationFiled || 0 },
+    { stage: 'Deposit Paid', count: currentCounselor?.depositPaid || 0 },
+    { stage: 'Registered', count: currentCounselor?.converted || 0 },
   ], [currentCounselor]);
 
   const dnpData = useMemo(() => {
     if (!selectedCounselor || !sharedLeadsData.length) {
       return [
-        { name: 'DNP1', value: 8 },
-        { name: 'DNP2', value: 12 },
-        { name: 'DNP3', value: 6 },
-        { name: 'DNP4', value: 4 },
+        { name: 'DNP1', value: 0 },
+        { name: 'DNP2', value: 0 },
+        { name: 'DNP3', value: 0 },
+        { name: 'DNP4', value: 0 },
       ];
     }
 
@@ -237,12 +237,7 @@ const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) =>
 
   const lostReasonData = useMemo(() => {
     if (!selectedCounselor || !sharedLeadsData.length) {
-      return [
-        { name: 'Price too high', value: 3 },
-        { name: 'Changed mind', value: 2 },
-        { name: 'Found alternative', value: 2 },
-        { name: 'Family issues', value: 1 },
-      ];
+      return [];
     }
 
     const reasonCounts: { [key: string]: number } = {};
@@ -395,40 +390,42 @@ const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) =>
           </Card>
 
           {/* Lost Reason Pie Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Lost Reasons</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-6">
-                <div className="flex-shrink-0 w-40">
-                  <CustomLegend payload={lostReasonData.map((item, index) => ({
-                    value: item.name,
-                    color: CHART_COLORS[index % CHART_COLORS.length]
-                  }))} />
+          {lostReasonData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Lost Reasons</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-6">
+                  <div className="flex-shrink-0 w-40">
+                    <CustomLegend payload={lostReasonData.map((item, index) => ({
+                      value: item.name,
+                      color: CHART_COLORS[index % CHART_COLORS.length]
+                    }))} />
+                  </div>
+                  <div className="flex-1 min-h-0">
+                    <ChartContainer config={{}} className="h-80">
+                      <PieChart width={320} height={320}>
+                        <Pie
+                          data={lostReasonData}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={100}
+                          dataKey="value"
+                          label={false}
+                        >
+                          {lostReasonData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                      </PieChart>
+                    </ChartContainer>
+                  </div>
                 </div>
-                <div className="flex-1 min-h-0">
-                  <ChartContainer config={{}} className="h-80">
-                    <PieChart width={320} height={320}>
-                      <Pie
-                        data={lostReasonData}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        dataKey="value"
-                        label={false}
-                      >
-                        {lostReasonData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                    </PieChart>
-                  </ChartContainer>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     );
@@ -476,7 +473,7 @@ const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) =>
         </div>
       </div>
 
-      {/* Top 3 Scorecards */}
+      {/* Top 3 Scorecards - Now Dynamic */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardContent className="p-6">
@@ -502,7 +499,7 @@ const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) =>
               <div>
                 <p className="text-sm font-medium text-gray-600">Average Conversion</p>
                 <p className="text-xl font-bold text-gray-900">{averageConversionRate}%</p>
-                <p className="text-sm text-blue-600">+3.2% from last month</p>
+                <p className="text-sm text-blue-600">Based on uploaded data</p>
               </div>
             </div>
           </CardContent>
@@ -587,8 +584,8 @@ const CounselorPerformance = ({ sharedLeadsData }: CounselorPerformanceProps) =>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        counselor.conversionRate >= 80 ? 'bg-green-100 text-green-800' :
-                        counselor.conversionRate >= 70 ? 'bg-yellow-100 text-yellow-800' :
+                        counselor.conversionRate >= 10 ? 'bg-green-100 text-green-800' :
+                        counselor.conversionRate >= 5 ? 'bg-yellow-100 text-yellow-800' :
                         'bg-red-100 text-red-800'
                       }`}>
                         {counselor.conversionRate}%

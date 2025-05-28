@@ -262,14 +262,18 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
   const assigneeData = useMemo(() => {
     const assigneeCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
-      const assignee = lead['Assignee Name'] || 'Unassigned';
+      const assignee = lead['Assignee Name'] || '';
       if (assignee.trim() !== '' && assignee !== 'Unassigned') {
         assigneeCounts[assignee] = (assigneeCounts[assignee] || 0) + 1;
       }
     });
     
     return Object.entries(assigneeCounts)
-      .map(([assignee, leads]) => ({ name: assignee, leads }))
+      .map(([assignee, leads]) => ({ 
+        name: assignee.length > 20 ? assignee.substring(0, 20) + '...' : assignee, 
+        leads,
+        fullName: assignee 
+      }))
       .sort((a, b) => b.leads - a.leads)
       .slice(0, 10);
   }, [getFilteredData]);
@@ -299,7 +303,11 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     });
     
     return Object.entries(adCounts)
-      .map(([ad, leads]) => ({ name: ad, leads }))
+      .map(([ad, leads]) => ({ 
+        name: ad.length > 25 ? ad.substring(0, 25) + '...' : ad, 
+        leads,
+        fullName: ad 
+      }))
       .sort((a, b) => b.leads - a.leads)
       .slice(0, 5);
   }, [getFilteredData]);
@@ -517,7 +525,6 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
 
       {leadsData.length > 0 && (
         <div className="space-y-6">
-          {/* Leads Over Time Chart */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -572,28 +579,27 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
           </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Lead Status Distribution */}
             <Card>
               <CardHeader>
                 <CardTitle>Lead Status Distribution</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-6">
-                  <div className="flex-shrink-0 w-40">
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0 w-32">
                     <CustomLegend payload={statusDistribution.map((item, index) => ({
                       value: item.name,
                       color: CHART_COLORS[index % CHART_COLORS.length]
                     }))} />
                   </div>
-                  <div className="flex-1 min-h-0">
-                    <ChartContainer config={{}} className="h-80">
-                      <PieChart width={320} height={320}>
+                  <div className="flex-1">
+                    <ChartContainer config={{}} className="h-64">
+                      <PieChart>
                         <Pie
                           data={statusDistribution}
                           cx="50%"
                           cy="50%"
-                          innerRadius={40}
-                          outerRadius={120}
+                          innerRadius={30}
+                          outerRadius={100}
                           dataKey="value"
                           label={false}
                         >
@@ -609,47 +615,49 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
               </CardContent>
             </Card>
 
-            {/* Leads by Assignee */}
             <Card>
               <CardHeader>
                 <CardTitle>Leads by Assignee</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-80">
+                <ChartContainer config={{}} className="h-64">
                   <BarChart 
                     data={assigneeData} 
-                    layout="horizontal" 
-                    margin={{ left: 100, right: 20, top: 20, bottom: 20 }}
-                    width={500}
-                    height={320}
+                    layout="horizontal"
+                    margin={{ left: 80, right: 20, top: 10, bottom: 10 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       type="number" 
                       tick={{ fontSize: 12 }}
-                      label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} 
+                      axisLine={false}
                     />
                     <YAxis 
                       dataKey="name" 
                       type="category" 
-                      width={120} 
+                      width={100} 
                       tick={{ fontSize: 11 }}
                       axisLine={false}
                       tickLine={false}
                     />
-                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      labelFormatter={(value, payload) => {
+                        const item = assigneeData.find(d => d.name === value);
+                        return item?.fullName || value;
+                      }}
+                    />
                     <Bar 
                       dataKey="leads" 
                       fill="#3B82F6" 
                       radius={[0, 4, 4, 0]}
-                      minPointSize={5}
+                      minPointSize={2}
                     />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
             </Card>
 
-            {/* Leads by City */}
             <Card>
               <CardHeader>
                 <CardTitle>Leads by City</CardTitle>
@@ -673,47 +681,49 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
               </CardContent>
             </Card>
 
-            {/* Top 5 Performing Ads */}
             <Card>
               <CardHeader>
                 <CardTitle>Top 5 Performing Ads</CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{}} className="h-80">
+                <ChartContainer config={{}} className="h-64">
                   <BarChart 
                     data={topAdsData} 
-                    layout="horizontal" 
-                    margin={{ left: 120, right: 20, top: 20, bottom: 20 }}
-                    width={500}
-                    height={320}
+                    layout="horizontal"
+                    margin={{ left: 120, right: 20, top: 10, bottom: 10 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis 
                       type="number" 
                       tick={{ fontSize: 12 }}
-                      label={{ value: 'Number of Leads', position: 'insideBottom', offset: -5 }} 
+                      axisLine={false}
                     />
                     <YAxis 
                       dataKey="name" 
                       type="category" 
-                      width={150} 
+                      width={140} 
                       tick={{ fontSize: 10 }}
                       axisLine={false}
                       tickLine={false}
                     />
-                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      labelFormatter={(value, payload) => {
+                        const item = topAdsData.find(d => d.name === value);
+                        return item?.fullName || value;
+                      }}
+                    />
                     <Bar 
                       dataKey="leads" 
                       fill="#F59E0B" 
                       radius={[0, 4, 4, 0]}
-                      minPointSize={5}
+                      minPointSize={2}
                     />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
             </Card>
 
-            {/* Student Preferences */}
             <Card>
               <CardHeader>
                 <CardTitle>Student Preferences</CardTitle>
@@ -737,29 +747,28 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
               </CardContent>
             </Card>
 
-            {/* Lost Reason Distribution */}
             {lostReasonData.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Lost Leads Reason</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-6">
-                    <div className="flex-shrink-0 w-40">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0 w-32">
                       <CustomLegend payload={lostReasonData.map((item, index) => ({
                         value: item.name,
                         color: CHART_COLORS[index % CHART_COLORS.length]
                       }))} />
                     </div>
-                    <div className="flex-1 min-h-0">
-                      <ChartContainer config={{}} className="h-80">
-                        <PieChart width={320} height={320}>
+                    <div className="flex-1">
+                      <ChartContainer config={{}} className="h-64">
+                        <PieChart>
                           <Pie
                             data={lostReasonData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={50}
-                            outerRadius={120}
+                            innerRadius={40}
+                            outerRadius={100}
                             dataKey="value"
                             label={false}
                           >
@@ -809,7 +818,6 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
               </div>
             </div>
           )) : (
-            // Fallback data when no file is uploaded
             [
               { name: 'Sarah Johnson', preference: 'MBA in Canada', status: 'New', timeAgo: '2 minutes ago' },
               { name: 'Michael Chen', preference: 'MS in Computer Science', status: 'Contacted', timeAgo: '15 minutes ago' },

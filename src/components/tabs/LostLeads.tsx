@@ -1,9 +1,10 @@
 
-import React, { useMemo } from 'react';
-import { AlertTriangle, Clock, XCircle, TrendingDown } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { AlertTriangle, Clock, XCircle, TrendingDown, User, Calendar, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface LeadData {
   status: string;
@@ -29,9 +30,38 @@ interface LostLeadsProps {
 }
 
 const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
+  const [timeFilter, setTimeFilter] = useState('all');
+
   const lostLeadsData = useMemo(() => {
     return sharedLeadsData.filter(lead => lead.status.toLowerCase().includes('lost'));
   }, [sharedLeadsData]);
+
+  const filteredLostLeads = useMemo(() => {
+    if (timeFilter === 'all') return lostLeadsData;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thisWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisYear = new Date(now.getFullYear(), 0, 1);
+
+    return lostLeadsData.filter(lead => {
+      if (!lead.parsedDate) return false;
+      
+      switch (timeFilter) {
+        case 'daily':
+          return lead.parsedDate >= today;
+        case 'weekly':
+          return lead.parsedDate >= thisWeek;
+        case 'monthly':
+          return lead.parsedDate >= thisMonth;
+        case 'yearly':
+          return lead.parsedDate >= thisYear;
+        default:
+          return true;
+      }
+    });
+  }, [lostLeadsData, timeFilter]);
 
   const lostLeadStats = useMemo(() => {
     const totalLost = lostLeadsData.length;
@@ -83,11 +113,11 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
   }, [lostLeadsData, sharedLeadsData]);
 
   const lostLeadsOverTime = useMemo(() => {
-    if (!lostLeadsData.length) return [];
+    if (!filteredLostLeads.length) return [];
 
     const timeData: { [key: string]: number } = {};
     
-    lostLeadsData.forEach(lead => {
+    filteredLostLeads.forEach(lead => {
       if (lead.parsedDate) {
         const dateKey = lead.parsedDate.toISOString().split('T')[0];
         timeData[dateKey] = (timeData[dateKey] || 0) + 1;
@@ -96,19 +126,19 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
 
     return Object.entries(timeData)
       .map(([date, count]) => ({
-        date: new Date(date).toLocaleDateString(),
-        count
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        count,
+        fullDate: date
       }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(-30); // Show last 30 days
-  }, [lostLeadsData]);
+      .sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime());
+  }, [filteredLostLeads]);
 
   const lostLeadsByAssignee = useMemo(() => {
-    if (!lostLeadsData.length) return [];
+    if (!filteredLostLeads.length) return [];
 
     const assigneeData: { [key: string]: number } = {};
     
-    lostLeadsData.forEach(lead => {
+    filteredLostLeads.forEach(lead => {
       const assignee = lead['Assignee Name'] || 'Unassigned';
       assigneeData[assignee] = (assigneeData[assignee] || 0) + 1;
     });
@@ -117,16 +147,16 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       .map(([name, count]) => ({ name, count }))
       .filter(item => item.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [lostLeadsData]);
+  }, [filteredLostLeads]);
 
   const lostLeadsByCity = useMemo(() => {
-    if (!lostLeadsData.length) return [];
+    if (!filteredLostLeads.length) return [];
 
     const cityData: { [key: string]: number } = {};
     
-    lostLeadsData.forEach(lead => {
+    filteredLostLeads.forEach(lead => {
       const city = lead.City;
-      if (city && city.toLowerCase() !== 'unknown' && city.trim() !== '') {
+      if (city && city.toLowerCase() !== 'unknown' && city.trim() !== '' && city.toLowerCase() !== 'n/a') {
         cityData[city] = (cityData[city] || 0) + 1;
       }
     });
@@ -134,25 +164,18 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
     return Object.entries(cityData)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 7); // Top 7 cities
-  }, [lostLeadsData]);
+      .slice(0, 7);
+  }, [filteredLostLeads]);
 
   const lossReasons = useMemo(() => {
-    if (!lostLeadsData.length) {
-      return [
-        { reason: 'Budget constraints', count: 98, percentage: '28%' },
-        { reason: 'Found another agency', count: 67, percentage: '19%' },
-        { reason: 'Changed mind about studying abroad', count: 56, percentage: '16%' },
-        { reason: 'No response to follow-ups', count: 45, percentage: '13%' },
-        { reason: 'Visa rejection concerns', count: 34, percentage: '10%' },
-        { reason: 'Other', count: 47, percentage: '14%' },
-      ];
-    }
+    if (!filteredLostLeads.length) return [];
 
     const reasonCounts: { [key: string]: number } = {};
-    lostLeadsData.forEach(lead => {
-      const reason = lead['Lost Reason'] || 'Unknown';
-      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    filteredLostLeads.forEach(lead => {
+      const reason = lead['Lost Reason'];
+      if (reason && reason.trim() !== '' && reason.toLowerCase() !== 'unknown') {
+        reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+      }
     });
 
     const total = Object.values(reasonCounts).reduce((sum, count) => sum + count, 0);
@@ -160,80 +183,43 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       .map(([reason, count]) => ({
         reason,
         count,
-        percentage: total > 0 ? `${Math.round((count / total) * 100)}%` : '0%'
+        percentage: total > 0 ? Math.round((count / total) * 100) : 0
       }))
       .sort((a, b) => b.count - a.count);
-  }, [lostLeadsData]);
+  }, [filteredLostLeads]);
 
-  const lostLeads = useMemo(() => {
-    if (!lostLeadsData.length) {
-      return [
-        {
-          name: 'James Wilson',
-          country: 'Canada',
-          reason: 'Budget constraints',
-          lostDate: '2024-01-15',
-          counselor: 'Jessica Martinez',
-          potential: 'High',
-        },
-        {
-          name: 'Lisa Chen',
-          country: 'Australia',
-          reason: 'Changed mind about studying abroad',
-          lostDate: '2024-01-14',
-          counselor: 'Alex Thompson',
-          potential: 'Medium',
-        },
-        {
-          name: 'Mohammed Al-Rashid',
-          country: 'UK',
-          reason: 'Found another agency',
-          lostDate: '2024-01-13',
-          counselor: 'Priya Sharma',
-          potential: 'High',
-        },
-        {
-          name: 'Sofia Rodriguez',
-          country: 'Germany',
-          reason: 'Visa rejection concerns',
-          lostDate: '2024-01-12',
-          counselor: 'Robert Wilson',
-          potential: 'Low',
-        },
-        {
-          name: 'David Kim',
-          country: 'Canada',
-          reason: 'No response to follow-ups',
-          lostDate: '2024-01-11',
-          counselor: 'Jessica Martinez',
-          potential: 'Medium',
-        },
-      ];
-    }
-
+  const recentLostLeads = useMemo(() => {
     return lostLeadsData
       .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))
       .slice(0, 10)
       .map(lead => ({
         name: lead.Name || 'Unknown',
-        country: lead['Student Preference'] || 'Unknown',
+        studentPreference: lead['Student Preference'] || 'Not specified',
         reason: lead['Lost Reason'] || 'Unknown',
-        lostDate: lead.parsedDate ? lead.parsedDate.toISOString().split('T')[0] : 'Unknown',
-        counselor: lead['Assignee Name'] || 'Unassigned',
-        potential: Math.random() > 0.6 ? 'High' : Math.random() > 0.3 ? 'Medium' : 'Low',
+        createdOn: lead.parsedDate ? lead.parsedDate.toLocaleDateString() : 'Unknown',
+        assignee: lead['Assignee Name'] || 'Unassigned',
       }));
   }, [lostLeadsData]);
+
+  const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Lost Leads Analysis</h2>
         <div className="mt-2 sm:mt-0">
-          <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option>Last 30 days</option>
-            <option>Last 7 days</option>
-            <option>Last 3 months</option>
-          </select>
+          <Select value={timeFilter} onValueChange={setTimeFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select time range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="daily">Today</SelectItem>
+              <SelectItem value="weekly">This Week</SelectItem>
+              <SelectItem value="monthly">This Month</SelectItem>
+              <SelectItem value="yearly">This Year</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -284,7 +270,7 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
                   textAnchor="end"
                   height={60}
                 />
-                <YAxis tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Line 
                   type="monotone" 
@@ -303,23 +289,54 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
             <CardTitle>Top Loss Reasons</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {lossReasons.map((item, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700">{item.reason}</span>
-                      <span className="text-sm text-gray-500">{item.count} leads ({item.percentage})</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-red-500 h-2 rounded-full" 
-                        style={{ width: item.percentage }}
-                      ></div>
-                    </div>
+            <div className="flex items-center justify-between h-80">
+              <ChartContainer config={{}} className="flex-1 h-full">
+                <PieChart>
+                  <Pie
+                    data={lossReasons}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="count"
+                  >
+                    {lossReasons.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-white p-2 border rounded shadow">
+                            <p className="font-medium">{data.reason}</p>
+                            <p className="text-sm">{data.count} leads ({data.percentage}%)</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }} 
+                  />
+                </PieChart>
+              </ChartContainer>
+              <div className="ml-4 space-y-2">
+                {lossReasons.map((item, index) => (
+                  <div key={index} className="flex items-center text-sm">
+                    <div 
+                      className="w-3 h-3 rounded-full mr-2" 
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    />
+                    <span className="flex-1 truncate max-w-[120px]" title={item.reason}>
+                      {item.reason}
+                    </span>
+                    <span className="ml-2 text-gray-500">
+                      {item.count} ({item.percentage}%)
+                    </span>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -334,19 +351,20 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
             <ChartContainer config={{}} className="h-80">
               <BarChart 
                 data={lostLeadsByAssignee} 
-                layout="horizontal"
-                margin={{ top: 20, right: 30, left: 80, bottom: 20 }}
+                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis 
-                  type="category" 
+                <XAxis 
                   dataKey="name" 
-                  width={70}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
                   tick={{ fontSize: 10 }}
+                  label={{ value: 'Assignee Name', position: 'insideBottom', offset: -5 }}
                 />
+                <YAxis tick={{ fontSize: 11 }} label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="count" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ChartContainer>
           </CardContent>
@@ -371,7 +389,7 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
                   tick={{ fontSize: 11 }}
                   label={{ value: 'City', position: 'insideBottom', offset: -5 }}
                 />
-                <YAxis tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -380,64 +398,48 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
         </Card>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Lost Leads</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Lead
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Country Interest
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Loss Reason
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Counselor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date Lost
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {lostLeads.map((lead, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-600">
-                          {lead.name.split(' ').map(n => n[0]).join('')}
-                        </span>
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-gray-900">{lead.name}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {lead.country}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                    {lead.reason}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {lead.counselor}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(lead.lostDate).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Recent Lost Leads
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {recentLostLeads.map((lead, index) => (
+              <div key={index} className="flex items-start justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                <div className="flex items-start space-x-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-semibold text-red-700">
+                      {lead.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{lead.name}</h4>
+                    <p className="text-sm text-gray-600 flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      Interested in {lead.studentPreference}
+                    </p>
+                    <p className="text-sm text-red-600 mt-1">
+                      <span className="font-medium">Reason:</span> {lead.reason}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center gap-1 text-sm text-gray-500 mb-1">
+                    <Calendar className="h-3 w-3" />
+                    {lead.createdOn}
+                  </div>
+                  <div className="text-sm font-medium text-gray-700">
+                    {lead.assignee}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -1,10 +1,17 @@
 
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Clock, XCircle, TrendingDown, User, Calendar, MapPin } from 'lucide-react';
+import { AlertTriangle, Clock, XCircle, TrendingDown, Filter, Calendar, User, MapPin, MessageCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, isWithinInterval } from 'date-fns';
 
 interface LeadData {
   status: string;
@@ -30,38 +37,49 @@ interface LostLeadsProps {
 }
 
 const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
-  const [timeFilter, setTimeFilter] = useState('all');
+  const [chartFilter, setChartFilter] = useState('All Time');
+
+  const CHART_COLORS = [
+    '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6',
+    '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899'
+  ];
 
   const lostLeadsData = useMemo(() => {
     return sharedLeadsData.filter(lead => lead.status.toLowerCase().includes('lost'));
   }, [sharedLeadsData]);
 
-  const filteredLostLeads = useMemo(() => {
-    if (timeFilter === 'all') return lostLeadsData;
+  const getFilteredChartData = useMemo(() => {
+    if (chartFilter === 'All Time') return lostLeadsData;
 
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const thisWeek = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisYear = new Date(now.getFullYear(), 0, 1);
+    let startDate: Date;
+    let endDate: Date;
 
-    return lostLeadsData.filter(lead => {
-      if (!lead.parsedDate) return false;
-      
-      switch (timeFilter) {
-        case 'daily':
-          return lead.parsedDate >= today;
-        case 'weekly':
-          return lead.parsedDate >= thisWeek;
-        case 'monthly':
-          return lead.parsedDate >= thisMonth;
-        case 'yearly':
-          return lead.parsedDate >= thisYear;
-        default:
-          return true;
-      }
-    });
-  }, [lostLeadsData, timeFilter]);
+    switch (chartFilter) {
+      case 'Daily':
+        startDate = startOfDay(now);
+        endDate = endOfDay(now);
+        break;
+      case 'Weekly':
+        startDate = startOfWeek(now);
+        endDate = endOfWeek(now);
+        break;
+      case 'Monthly':
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+        break;
+      case 'Yearly':
+        startDate = startOfYear(now);
+        endDate = endOfYear(now);
+        break;
+      default:
+        return lostLeadsData;
+    }
+
+    return lostLeadsData.filter(lead => 
+      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: startDate, end: endDate })
+    );
+  }, [lostLeadsData, chartFilter]);
 
   const lostLeadStats = useMemo(() => {
     const totalLost = lostLeadsData.length;
@@ -113,32 +131,49 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
   }, [lostLeadsData, sharedLeadsData]);
 
   const lostLeadsOverTime = useMemo(() => {
-    if (!filteredLostLeads.length) return [];
+    if (!getFilteredChartData.length) return [];
 
     const timeData: { [key: string]: number } = {};
     
-    filteredLostLeads.forEach(lead => {
+    getFilteredChartData.forEach(lead => {
       if (lead.parsedDate) {
-        const dateKey = lead.parsedDate.toISOString().split('T')[0];
+        let dateKey: string;
+        switch (chartFilter) {
+          case 'Daily':
+            dateKey = format(lead.parsedDate, 'HH:mm');
+            break;
+          case 'Weekly':
+            dateKey = format(lead.parsedDate, 'EEE');
+            break;
+          case 'Monthly':
+            dateKey = format(lead.parsedDate, 'dd MMM');
+            break;
+          case 'Yearly':
+            dateKey = format(lead.parsedDate, 'MMM yyyy');
+            break;
+          default:
+            dateKey = format(lead.parsedDate, 'MMM yyyy');
+        }
         timeData[dateKey] = (timeData[dateKey] || 0) + 1;
       }
     });
 
     return Object.entries(timeData)
-      .map(([date, count]) => ({
-        time: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        count,
-        fullDate: date
-      }))
-      .sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime());
-  }, [filteredLostLeads]);
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => {
+        if (chartFilter === 'Daily') {
+          return a.date.localeCompare(b.date);
+        }
+        return new Date(a.date).getTime() - new Date(b.date).getTime();
+      });
+  }, [getFilteredChartData, chartFilter]);
 
   const lostLeadsByAssignee = useMemo(() => {
-    if (!filteredLostLeads.length) return [];
+    if (!getFilteredChartData.length) return [];
 
     const assigneeData: { [key: string]: number } = {};
     
-    filteredLostLeads.forEach(lead => {
+    getFilteredChartData.forEach(lead => {
       const assignee = lead['Assignee Name'] || 'Unassigned';
       assigneeData[assignee] = (assigneeData[assignee] || 0) + 1;
     });
@@ -147,16 +182,16 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       .map(([name, count]) => ({ name, count }))
       .filter(item => item.count > 0)
       .sort((a, b) => b.count - a.count);
-  }, [filteredLostLeads]);
+  }, [getFilteredChartData]);
 
   const lostLeadsByCity = useMemo(() => {
-    if (!filteredLostLeads.length) return [];
+    if (!getFilteredChartData.length) return [];
 
     const cityData: { [key: string]: number } = {};
     
-    filteredLostLeads.forEach(lead => {
+    getFilteredChartData.forEach(lead => {
       const city = lead.City;
-      if (city && city.toLowerCase() !== 'unknown' && city.trim() !== '' && city.toLowerCase() !== 'n/a') {
+      if (city && city.toLowerCase() !== 'unknown' && city.trim() !== '') {
         cityData[city] = (cityData[city] || 0) + 1;
       }
     });
@@ -165,15 +200,15 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 7);
-  }, [filteredLostLeads]);
+  }, [getFilteredChartData]);
 
   const lossReasons = useMemo(() => {
-    if (!filteredLostLeads.length) return [];
+    if (!getFilteredChartData.length) return [];
 
     const reasonCounts: { [key: string]: number } = {};
-    filteredLostLeads.forEach(lead => {
-      const reason = lead['Lost Reason'];
-      if (reason && reason.trim() !== '' && reason.toLowerCase() !== 'unknown') {
+    getFilteredChartData.forEach(lead => {
+      const reason = lead['Lost Reason'] || 'Unknown';
+      if (reason.trim() !== '') {
         reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
       }
     });
@@ -181,32 +216,67 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
     const total = Object.values(reasonCounts).reduce((sum, count) => sum + count, 0);
     return Object.entries(reasonCounts)
       .map(([reason, count]) => ({
-        reason,
-        count,
-        percentage: total > 0 ? Math.round((count / total) * 100) : 0
+        name: reason,
+        value: count,
+        percentage: total > 0 ? `${Math.round((count / total) * 100)}%` : '0%'
       }))
-      .sort((a, b) => b.count - a.count);
-  }, [filteredLostLeads]);
+      .sort((a, b) => b.value - a.value);
+  }, [getFilteredChartData]);
 
   const recentLostLeads = useMemo(() => {
     return lostLeadsData
+      .filter(lead => lead.parsedDate)
       .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))
       .slice(0, 10)
       .map(lead => ({
         name: lead.Name || 'Unknown',
-        studentPreference: lead['Student Preference'] || 'Not specified',
+        studentPreference: lead['Student Preference'] || 'Unknown Program',
         reason: lead['Lost Reason'] || 'Unknown',
-        createdOn: lead.parsedDate ? lead.parsedDate.toLocaleDateString() : 'Unknown',
+        createdOn: lead.parsedDate ? format(lead.parsedDate, 'dd MMM yyyy') : 'Unknown',
         assignee: lead['Assignee Name'] || 'Unassigned',
       }));
   }, [lostLeadsData]);
 
-  const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
+  const CustomLegend = ({ data }: { data: any[] }) => {
+    return (
+      <div className="flex flex-col space-y-2 text-sm max-w-48">
+        {data.map((entry, index) => (
+          <div key={index} className="flex items-center justify-between space-x-3">
+            <div className="flex items-center space-x-2">
+              <div 
+                className="w-3 h-3 rounded-sm flex-shrink-0" 
+                style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+              />
+              <span className="text-gray-700 text-xs truncate">{entry.name}</span>
+            </div>
+            <span className="text-gray-500 text-xs font-medium">{entry.percentage}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Lost Leads Analysis</h2>
+        <div className="mt-2 sm:mt-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Filter className="h-4 w-4 mr-2" />
+                Charts: {chartFilter}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {['All Time', 'Daily', 'Weekly', 'Monthly', 'Yearly'].map((filter) => (
+                <DropdownMenuItem key={filter} onClick={() => setChartFilter(filter)}>
+                  {filter}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -243,48 +313,28 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Lost Leads Over Time</CardTitle>
-              <Select value={timeFilter} onValueChange={setTimeFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select time range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="daily">Today</SelectItem>
-                  <SelectItem value="weekly">This Week</SelectItem>
-                  <SelectItem value="monthly">This Month</SelectItem>
-                  <SelectItem value="yearly">This Year</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <CardTitle>Lost Leads Over Time</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer config={{}} className="h-80">
-              <LineChart data={lostLeadsOverTime} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+              <LineChart data={lostLeadsOverTime} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis 
-                  dataKey="time" 
-                  tick={{ fontSize: 12 }}
+                  dataKey="date" 
+                  tick={{ fontSize: 11 }}
                   angle={-45}
                   textAnchor="end"
                   height={80}
                 />
-                <YAxis 
-                  tick={{ fontSize: 12 }}
-                  label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
-                />
-                <ChartTooltip 
-                  content={<ChartTooltipContent />}
-                  labelFormatter={(value) => `Period: ${value}`}
-                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
                 <Line 
                   type="monotone" 
                   dataKey="count" 
                   stroke="#ef4444" 
                   strokeWidth={3}
                   dot={{ fill: '#ef4444', strokeWidth: 2, r: 4 }}
-                  activeDot={{ r: 6, stroke: '#ef4444', strokeWidth: 2 }}
+                  activeDot={{ r: 6 }}
                 />
               </LineChart>
             </ChartContainer>
@@ -296,53 +346,29 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
             <CardTitle>Top Loss Reasons</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between h-80">
-              <ChartContainer config={{}} className="flex-1 h-full">
-                <PieChart>
-                  <Pie
-                    data={lossReasons}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="count"
-                  >
-                    {lossReasons.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip 
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-white p-2 border rounded shadow">
-                            <p className="font-medium">{data.reason}</p>
-                            <p className="text-sm">{data.count} leads ({data.percentage}%)</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }} 
-                  />
-                </PieChart>
-              </ChartContainer>
-              <div className="ml-4 space-y-2">
-                {lossReasons.map((item, index) => (
-                  <div key={index} className="flex items-center text-sm">
-                    <div 
-                      className="w-3 h-3 rounded-full mr-2" 
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                    />
-                    <span className="flex-1 truncate max-w-[120px]" title={item.reason}>
-                      {item.reason}
-                    </span>
-                    <span className="ml-2 text-gray-500">
-                      {item.count} ({item.percentage}%)
-                    </span>
-                  </div>
-                ))}
+            <div className="flex items-center gap-6">
+              <div className="flex-shrink-0 w-40">
+                <CustomLegend data={lossReasons} />
+              </div>
+              <div className="flex-1">
+                <ChartContainer config={{}} className="h-80">
+                  <PieChart>
+                    <Pie
+                      data={lossReasons}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={120}
+                      dataKey="value"
+                      label={false}
+                    >
+                      {lossReasons.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                  </PieChart>
+                </ChartContainer>
               </div>
             </div>
           </CardContent>
@@ -355,21 +381,24 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
             <CardTitle>Lost Leads by Assignee</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={{}} className="h-80">
+            <ChartContainer config={{}} className="h-96">
               <BarChart 
                 data={lostLeadsByAssignee} 
-                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                margin={{ top: 20, right: 30, left: 20, bottom: 120 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis 
                   dataKey="name" 
                   angle={-45}
                   textAnchor="end"
-                  height={80}
-                  tick={{ fontSize: 10 }}
-                  label={{ value: 'Assignee Name', position: 'insideBottom', offset: -5 }}
+                  height={140}
+                  tick={{ fontSize: 11 }}
+                  label={{ value: 'Assignee Name', position: 'insideBottom', offset: -10 }}
                 />
-                <YAxis tick={{ fontSize: 11 }} label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
+                <YAxis 
+                  tick={{ fontSize: 11 }}
+                  label={{ value: 'Count of Lost Leads', angle: -90, position: 'insideLeft' }}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -382,21 +411,24 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
             <CardTitle>Lost Leads by City</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={{}} className="h-80">
+            <ChartContainer config={{}} className="h-96">
               <BarChart 
                 data={lostLeadsByCity} 
-                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis 
                   dataKey="name" 
                   angle={-45}
                   textAnchor="end"
-                  height={80}
+                  height={100}
                   tick={{ fontSize: 11 }}
                   label={{ value: 'City', position: 'insideBottom', offset: -5 }}
                 />
-                <YAxis tick={{ fontSize: 11 }} label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
+                <YAxis 
+                  tick={{ fontSize: 11 }}
+                  label={{ value: 'Count of Lost Leads', angle: -90, position: 'insideLeft' }}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -405,48 +437,71 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <MessageCircle className="h-5 w-5 text-red-600" />
             Recent Lost Leads
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {recentLostLeads.map((lead, index) => (
-              <div key={index} className="flex items-start justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-semibold text-red-700">
-                      {lead.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+          </h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Lead Details
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Loss Reason
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Assignee
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date Lost
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {recentLostLeads.map((lead, index) => (
+                <tr key={index} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center">
+                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                        <User className="h-6 w-6 text-red-600" />
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-semibold text-gray-900">{lead.name}</p>
+                        <p className="text-sm text-gray-600 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          Interested in {lead.studentPreference}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      {lead.reason}
                     </span>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">{lead.name}</h4>
-                    <p className="text-sm text-gray-600 flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      Interested in {lead.studentPreference}
-                    </p>
-                    <p className="text-sm text-red-600 mt-1">
-                      <span className="font-medium">Reason:</span> {lead.reason}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-1 text-sm text-gray-500 mb-1">
-                    <Calendar className="h-3 w-3" />
-                    {lead.createdOn}
-                  </div>
-                  <div className="text-sm font-medium text-gray-700">
-                    {lead.assignee}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-gray-400" />
+                      {lead.assignee}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-400" />
+                      {lead.createdOn}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

@@ -1,6 +1,9 @@
 
 import React, { useMemo } from 'react';
-import { AlertTriangle, Clock, XCircle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Clock, XCircle, TrendingDown } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ResponsiveContainer } from 'recharts';
 
 interface LeadData {
   status: string;
@@ -32,6 +35,9 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
 
   const lostLeadStats = useMemo(() => {
     const totalLost = lostLeadsData.length;
+    const totalLeads = sharedLeadsData.length;
+    const lostPercentage = totalLeads > 0 ? Math.round((totalLost / totalLeads) * 100) : 0;
+    
     const thisMonth = lostLeadsData.filter(lead => {
       if (!lead.parsedDate) return false;
       const now = new Date();
@@ -66,14 +72,97 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
         bgColor: 'bg-blue-100',
       },
       {
-        title: 'Recovery Rate',
-        value: '18%',
+        title: '% of Lost Leads',
+        value: `${lostPercentage}%`,
         change: '+2.1%',
-        icon: RefreshCw,
-        color: 'text-green-600',
-        bgColor: 'bg-green-100',
+        icon: TrendingDown,
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
       },
     ];
+  }, [lostLeadsData, sharedLeadsData]);
+
+  const lostLeadsOverTime = useMemo(() => {
+    if (!lostLeadsData.length) return [];
+
+    const timeData: { [key: string]: number } = {};
+    
+    lostLeadsData.forEach(lead => {
+      if (lead.parsedDate) {
+        const dateKey = lead.parsedDate.toISOString().split('T')[0];
+        timeData[dateKey] = (timeData[dateKey] || 0) + 1;
+      }
+    });
+
+    return Object.entries(timeData)
+      .map(([date, count]) => ({
+        date: new Date(date).toLocaleDateString(),
+        count
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-30); // Show last 30 days
+  }, [lostLeadsData]);
+
+  const lostLeadsByAssignee = useMemo(() => {
+    if (!lostLeadsData.length) return [];
+
+    const assigneeData: { [key: string]: number } = {};
+    
+    lostLeadsData.forEach(lead => {
+      const assignee = lead['Assignee Name'] || 'Unassigned';
+      assigneeData[assignee] = (assigneeData[assignee] || 0) + 1;
+    });
+
+    return Object.entries(assigneeData)
+      .map(([name, count]) => ({ name, count }))
+      .filter(item => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [lostLeadsData]);
+
+  const lostLeadsByCity = useMemo(() => {
+    if (!lostLeadsData.length) return [];
+
+    const cityData: { [key: string]: number } = {};
+    
+    lostLeadsData.forEach(lead => {
+      const city = lead.City;
+      if (city && city.toLowerCase() !== 'unknown' && city.trim() !== '') {
+        cityData[city] = (cityData[city] || 0) + 1;
+      }
+    });
+
+    return Object.entries(cityData)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 7); // Top 7 cities
+  }, [lostLeadsData]);
+
+  const lossReasons = useMemo(() => {
+    if (!lostLeadsData.length) {
+      return [
+        { reason: 'Budget constraints', count: 98, percentage: '28%' },
+        { reason: 'Found another agency', count: 67, percentage: '19%' },
+        { reason: 'Changed mind about studying abroad', count: 56, percentage: '16%' },
+        { reason: 'No response to follow-ups', count: 45, percentage: '13%' },
+        { reason: 'Visa rejection concerns', count: 34, percentage: '10%' },
+        { reason: 'Other', count: 47, percentage: '14%' },
+      ];
+    }
+
+    const reasonCounts: { [key: string]: number } = {};
+    lostLeadsData.forEach(lead => {
+      const reason = lead['Lost Reason'] || 'Unknown';
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+
+    const total = Object.values(reasonCounts).reduce((sum, count) => sum + count, 0);
+    return Object.entries(reasonCounts)
+      .map(([reason, count]) => ({
+        reason,
+        count,
+        percentage: total > 0 ? `${Math.round((count / total) * 100)}%` : '0%'
+      }))
+      .sort((a, b) => b.count - a.count);
   }, [lostLeadsData]);
 
   const lostLeads = useMemo(() => {
@@ -135,34 +224,6 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       }));
   }, [lostLeadsData]);
 
-  const lossReasons = useMemo(() => {
-    if (!lostLeadsData.length) {
-      return [
-        { reason: 'Budget constraints', count: 98, percentage: '28%' },
-        { reason: 'Found another agency', count: 67, percentage: '19%' },
-        { reason: 'Changed mind about studying abroad', count: 56, percentage: '16%' },
-        { reason: 'No response to follow-ups', count: 45, percentage: '13%' },
-        { reason: 'Visa rejection concerns', count: 34, percentage: '10%' },
-        { reason: 'Other', count: 47, percentage: '14%' },
-      ];
-    }
-
-    const reasonCounts: { [key: string]: number } = {};
-    lostLeadsData.forEach(lead => {
-      const reason = lead['Lost Reason'] || 'Unknown';
-      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
-    });
-
-    const total = Object.values(reasonCounts).reduce((sum, count) => sum + count, 0);
-    return Object.entries(reasonCounts)
-      .map(([reason, count]) => ({
-        reason,
-        count,
-        percentage: total > 0 ? `${Math.round((count / total) * 100)}%` : '0%'
-      }))
-      .sort((a, b) => b.count - a.count);
-  }, [lostLeadsData]);
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -189,7 +250,9 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
                   <p className={`text-sm mt-1 ${
-                    stat.title === 'Recovery Rate' || stat.title === 'Avg. Time to Loss' ? 
+                    stat.title === '% of Lost Leads' ? 
+                      (isPositive ? 'text-red-600' : 'text-green-600') :
+                    stat.title === 'Avg. Time to Loss' ? 
                       (isNegative ? 'text-green-600' : 'text-red-600') :
                       (isPositive ? 'text-red-600' : 'text-green-600')
                   }`}>
@@ -206,52 +269,115 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Loss Reasons</h3>
-          <div className="space-y-3">
-            {lossReasons.map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">{item.reason}</span>
-                    <span className="text-sm text-gray-500">{item.count} leads ({item.percentage})</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-red-500 h-2 rounded-full" 
-                      style={{ width: item.percentage }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Lost Leads Over Time</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{}} className="h-80">
+              <LineChart data={lostLeadsOverTime} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 11 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Line 
+                  type="monotone" 
+                  dataKey="count" 
+                  stroke="#ef4444" 
+                  strokeWidth={2}
+                  dot={{ fill: '#ef4444', strokeWidth: 2, r: 4 }}
+                />
+              </LineChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recovery Opportunities</h3>
-          <div className="space-y-4">
-            {lostLeads.filter(lead => lead.potential === 'High').map((lead, index) => (
-              <div key={index} className="border border-orange-200 rounded-lg p-4 bg-orange-50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">{lead.name}</p>
-                    <p className="text-sm text-gray-600">Interested in {lead.country}</p>
-                    <p className="text-sm text-orange-600 mt-1">Reason: {lead.reason}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
-                      High Potential
-                    </span>
-                    <button className="block mt-2 px-3 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700 transition-colors">
-                      Re-engage
-                    </button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Loss Reasons</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {lossReasons.map((item, index) => (
+                <div key={index} className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-gray-700">{item.reason}</span>
+                      <span className="text-sm text-gray-500">{item.count} leads ({item.percentage})</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-red-500 h-2 rounded-full" 
+                        style={{ width: item.percentage }}
+                      ></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Lost Leads by Assignee</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{}} className="h-80">
+              <BarChart 
+                data={lostLeadsByAssignee} 
+                layout="horizontal"
+                margin={{ top: 20, right: 30, left: 80, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis 
+                  type="category" 
+                  dataKey="name" 
+                  width={70}
+                  tick={{ fontSize: 10 }}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="count" fill="#ef4444" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Lost Leads by City</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{}} className="h-80">
+              <BarChart 
+                data={lostLeadsByCity} 
+                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="name" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  tick={{ fontSize: 11 }}
+                  label={{ value: 'City', position: 'insideBottom', offset: -5 }}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -273,9 +399,6 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Counselor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Recovery Potential
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date Lost
@@ -305,15 +428,6 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {lead.counselor}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      lead.potential === 'High' ? 'bg-red-100 text-red-800' :
-                      lead.potential === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'
-                    }`}>
-                      {lead.potential}
-                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {new Date(lead.lostDate).toLocaleDateString()}

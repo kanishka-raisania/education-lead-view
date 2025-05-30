@@ -126,7 +126,7 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
 
     return Object.entries(timeData)
       .map(([date, count]) => ({
-        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        time: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         count,
         fullDate: date
       }))
@@ -207,20 +207,6 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Lost Leads Analysis</h2>
-        <div className="mt-2 sm:mt-0">
-          <Select value={timeFilter} onValueChange={setTimeFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select time range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
-              <SelectItem value="daily">Today</SelectItem>
-              <SelectItem value="weekly">This Week</SelectItem>
-              <SelectItem value="monthly">This Month</SelectItem>
-              <SelectItem value="yearly">This Year</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -257,27 +243,48 @@ const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Lost Leads Over Time</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Lost Leads Over Time</CardTitle>
+              <Select value={timeFilter} onValueChange={setTimeFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select time range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="daily">Today</SelectItem>
+                  <SelectItem value="weekly">This Week</SelectItem>
+                  <SelectItem value="monthly">This Month</SelectItem>
+                  <SelectItem value="yearly">This Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
             <ChartContainer config={{}} className="h-80">
               <LineChart data={lostLeadsOverTime} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 11 }}
+                  dataKey="time" 
+                  tick={{ fontSize: 12 }}
                   angle={-45}
                   textAnchor="end"
-                  height={60}
+                  height={80}
                 />
-                <YAxis tick={{ fontSize: 11 }} label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <YAxis 
+                  tick={{ fontSize: 12 }}
+                  label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
+                />
+                <ChartTooltip 
+                  content={<ChartTooltipContent />}
+                  labelFormatter={(value) => `Period: ${value}`}
+                />
                 <Line 
                   type="monotone" 
                   dataKey="count" 
                   stroke="#ef4444" 
-                  strokeWidth={2}
+                  strokeWidth={3}
                   dot={{ fill: '#ef4444', strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, stroke: '#ef4444', strokeWidth: 2 }}
                 />
               </LineChart>
             </ChartContainer>

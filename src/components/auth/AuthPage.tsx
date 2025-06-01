@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
-import { GraduationCap, Loader2 } from 'lucide-react';
+import { GraduationCap, Loader2, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const AuthPage = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
   const { signIn, signUp } = useAuth();
   const { toast } = useToast();
 
@@ -30,12 +31,14 @@ const AuthPage = () => {
     setIsLoading(true);
 
     try {
+      console.log('Login attempt for:', loginForm.email);
       const { error } = await signIn(loginForm.email, loginForm.password);
       
       if (error) {
+        console.error('Login failed:', error);
         toast({
           title: "Login Failed",
-          description: error.message,
+          description: error.message || "Please check your credentials and try again.",
           variant: "destructive"
         });
       } else {
@@ -45,6 +48,7 @@ const AuthPage = () => {
         });
       }
     } catch (error) {
+      console.error('Login exception:', error);
       toast({
         title: "Login Failed",
         description: "An unexpected error occurred.",
@@ -60,21 +64,27 @@ const AuthPage = () => {
     setIsLoading(true);
 
     try {
+      console.log('Signup attempt for:', signupForm.email);
       const { error } = await signUp(signupForm.email, signupForm.password, signupForm.fullName);
       
       if (error) {
+        console.error('Signup failed:', error);
         toast({
           title: "Signup Failed",
-          description: error.message,
+          description: error.message || "Please check your information and try again.",
           variant: "destructive"
         });
       } else {
+        setSignupSuccess(true);
         toast({
           title: "Account Created!",
-          description: "Please check your email to verify your account."
+          description: "Please check your email to verify your account before logging in."
         });
+        // Reset form
+        setSignupForm({ email: '', password: '', fullName: '' });
       }
     } catch (error) {
+      console.error('Signup exception:', error);
       toast({
         title: "Signup Failed",
         description: "An unexpected error occurred.",
@@ -84,6 +94,33 @@ const AuthPage = () => {
       setIsLoading(false);
     }
   };
+
+  if (signupSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <CheckCircle className="h-12 w-12 text-green-600" />
+            </div>
+            <CardTitle className="text-2xl">Check Your Email</CardTitle>
+            <CardDescription>
+              We've sent you a confirmation link. Please check your email and click the link to verify your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              onClick={() => setSignupSuccess(false)} 
+              variant="outline" 
+              className="w-full"
+            >
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -112,6 +149,7 @@ const AuthPage = () => {
                     value={loginForm.email}
                     onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
@@ -122,6 +160,7 @@ const AuthPage = () => {
                     value={loginForm.password}
                     onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={isLoading}>
@@ -141,6 +180,7 @@ const AuthPage = () => {
                     value={signupForm.fullName}
                     onChange={(e) => setSignupForm(prev => ({ ...prev, fullName: e.target.value }))}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
@@ -151,6 +191,7 @@ const AuthPage = () => {
                     value={signupForm.email}
                     onChange={(e) => setSignupForm(prev => ({ ...prev, email: e.target.value }))}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
@@ -161,6 +202,8 @@ const AuthPage = () => {
                     value={signupForm.password}
                     onChange={(e) => setSignupForm(prev => ({ ...prev, password: e.target.value }))}
                     required
+                    disabled={isLoading}
+                    minLength={6}
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={isLoading}>

@@ -1,86 +1,8 @@
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { DollarSign, Eye, MousePointer, TrendingUp } from 'lucide-react';
 
-interface LeadData {
-  status: string;
-  'Lost Reason': string;
-  'Assignee Name': string;
-  'Assignee Email': string;
-  Name: string;
-  Phone: string;
-  Email: string;
-  City: string;
-  'Fb Campaign': string;
-  'Fb Lead ID': string;
-  'Facebook Ad': string;
-  'Student Preference': string;
-  'Created On': string;
-  'Modified On': string;
-  'Batch Names': string;
-  parsedDate?: Date;
-}
-
-interface FacebookAdsAnalysisProps {
-  sharedLeadsData: LeadData[];
-}
-
-const FacebookAdsAnalysis = ({ sharedLeadsData }: FacebookAdsAnalysisProps) => {
-  const campaigns = useMemo(() => {
-    if (!sharedLeadsData.length) {
-      // Default data when no file is uploaded
-      return [
-        {
-          name: 'Study in Canada - University Programs',
-          spend: '$3,250',
-          leads: 72,
-          cpl: '$45.14',
-          status: 'Active',
-        },
-        {
-          name: 'Australia Student Visa Guide',
-          spend: '$2,890',
-          leads: 65,
-          cpl: '$44.46',
-          status: 'Active',
-        },
-        {
-          name: 'UK Universities - Scholarship Info',
-          spend: '$2,150',
-          leads: 48,
-          cpl: '$44.79',
-          status: 'Paused',
-        },
-        {
-          name: 'Germany Study Programs',
-          spend: '$4,160',
-          leads: 91,
-          cpl: '$45.71',
-          status: 'Active',
-        },
-      ];
-    }
-
-    const campaignCounts: { [key: string]: number } = {};
-    sharedLeadsData.forEach(lead => {
-      const campaign = lead['Fb Campaign'];
-      if (campaign && campaign.trim() !== '') {
-        campaignCounts[campaign] = (campaignCounts[campaign] || 0) + 1;
-      }
-    });
-
-    return Object.entries(campaignCounts)
-      .map(([name, leads]) => ({
-        name,
-        spend: `$${(leads * 45).toLocaleString()}`, // Mock spend calculation
-        leads,
-        cpl: `$${(45 + Math.random() * 10).toFixed(2)}`, // Mock CPL
-        status: Math.random() > 0.2 ? 'Active' : 'Paused',
-      }))
-      .sort((a, b) => b.leads - a.leads)
-      .slice(0, 10);
-  }, [sharedLeadsData]);
-
+const FacebookAdsAnalysis = () => {
   const adMetrics = [
     {
       title: 'Total Spend',
@@ -113,6 +35,37 @@ const FacebookAdsAnalysis = ({ sharedLeadsData }: FacebookAdsAnalysisProps) => {
       icon: TrendingUp,
       color: 'text-orange-600',
       bgColor: 'bg-orange-100',
+    },
+  ];
+
+  const campaigns = [
+    {
+      name: 'Study in Canada - University Programs',
+      spend: '$3,250',
+      leads: 72,
+      cpl: '$45.14',
+      status: 'Active',
+    },
+    {
+      name: 'Australia Student Visa Guide',
+      spend: '$2,890',
+      leads: 65,
+      cpl: '$44.46',
+      status: 'Active',
+    },
+    {
+      name: 'UK Universities - Scholarship Info',
+      spend: '$2,150',
+      leads: 48,
+      cpl: '$44.79',
+      status: 'Paused',
+    },
+    {
+      name: 'Germany Study Programs',
+      spend: '$4,160',
+      leads: 91,
+      cpl: '$45.71',
+      status: 'Active',
     },
   ];
 
@@ -218,19 +171,19 @@ const FacebookAdsAnalysis = ({ sharedLeadsData }: FacebookAdsAnalysisProps) => {
           <div className="flex items-start space-x-3">
             <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
             <p className="text-sm text-gray-700">
-              <strong>Top performing campaign</strong> generated {campaigns[0]?.leads || 0} leads this month.
+              <strong>Germany Study Programs</strong> campaign has the highest lead volume with 91 leads generated this month.
             </p>
           </div>
           <div className="flex items-start space-x-3">
             <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
             <p className="text-sm text-gray-700">
-              <strong>Average cost per lead</strong> across all campaigns is approximately $45.
+              <strong>Australia Student Visa Guide</strong> has the lowest cost per lead at $44.46, making it the most cost-effective campaign.
             </p>
           </div>
           <div className="flex items-start space-x-3">
             <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2"></div>
             <p className="text-sm text-gray-700">
-              Monitor paused campaigns for potential reactivation opportunities.
+              Consider reactivating <strong>UK Universities - Scholarship Info</strong> campaign as it showed good performance before being paused.
             </p>
           </div>
         </div>

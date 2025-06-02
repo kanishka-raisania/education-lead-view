@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { GraduationCap } from 'lucide-react';
+import UserMenu from '@/components/auth/UserMenu';
 
 const NavigationHeader = () => {
   return (
@@ -13,11 +14,9 @@ const NavigationHeader = () => {
               Help Study Abroad - Lead Dashboard
             </h1>
           </div>
-          <div className="hidden md:flex items-center space-x-4">
-            <span className="text-sm text-gray-600">Welcome back!</span>
-            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-              <span className="text-sm font-medium text-blue-600">A</span>
-            </div>
+          <div className="flex items-center space-x-4">
+            <span className="hidden md:inline text-sm text-gray-600">Welcome back!</span>
+            <UserMenu />
           </div>
         </div>
       </div>

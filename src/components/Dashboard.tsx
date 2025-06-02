@@ -7,21 +7,41 @@ import CounselorPerformance from './tabs/CounselorPerformance';
 import FacebookAdsAnalysis from './tabs/FacebookAdsAnalysis';
 import LostLeads from './tabs/LostLeads';
 
+interface LeadData {
+  status: string;
+  'Lost Reason': string;
+  'Assignee Name': string;
+  'Assignee Email': string;
+  Name: string;
+  Phone: string;
+  Email: string;
+  City: string;
+  'Fb Campaign': string;
+  'Fb Lead ID': string;
+  'Facebook Ad': string;
+  'Student Preference': string;
+  'Created On': string;
+  'Modified On': string;
+  'Batch Names': string;
+  parsedDate?: Date;
+}
+
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overall-leads');
+  const [sharedLeadsData, setSharedLeadsData] = useState<LeadData[]>([]);
 
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overall-leads':
-        return <OverallLeads />;
+        return <OverallLeads sharedLeadsData={sharedLeadsData} setSharedLeadsData={setSharedLeadsData} />;
       case 'counselor-performance':
-        return <CounselorPerformance />;
+        return <CounselorPerformance sharedLeadsData={sharedLeadsData} />;
       case 'facebook-ads':
-        return <FacebookAdsAnalysis />;
+        return <FacebookAdsAnalysis sharedLeadsData={sharedLeadsData} />;
       case 'lost-leads':
-        return <LostLeads />;
+        return <LostLeads sharedLeadsData={sharedLeadsData} />;
       default:
-        return <OverallLeads />;
+        return <OverallLeads sharedLeadsData={sharedLeadsData} setSharedLeadsData={setSharedLeadsData} />;
     }
   };
 

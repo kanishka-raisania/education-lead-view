@@ -1,106 +1,236 @@
 
-import React from 'react';
-import { AlertTriangle, Clock, XCircle, RefreshCw } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { AlertTriangle, Clock, XCircle, TrendingDown, User, Calendar, MapPin } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
-const LostLeads = () => {
-  const lostLeadStats = [
-    {
-      title: 'Total Lost Leads',
-      value: '347',
-      change: '+12.3%',
-      icon: XCircle,
-      color: 'text-red-600',
-      bgColor: 'bg-red-100',
-    },
-    {
-      title: 'Lost This Month',
-      value: '58',
-      change: '+8.1%',
-      icon: AlertTriangle,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-100',
-    },
-    {
-      title: 'Avg. Time to Loss',
-      value: '4.2 days',
-      change: '-0.3 days',
-      icon: Clock,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-    },
-    {
-      title: 'Recovery Rate',
-      value: '18%',
-      change: '+2.1%',
-      icon: RefreshCw,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100',
-    },
-  ];
+interface LeadData {
+  status: string;
+  'Lost Reason': string;
+  'Assignee Name': string;
+  'Assignee Email': string;
+  Name: string;
+  Phone: string;
+  Email: string;
+  City: string;
+  'Fb Campaign': string;
+  'Fb Lead ID': string;
+  'Facebook Ad': string;
+  'Student Preference': string;
+  'Created On': string;
+  'Modified On': string;
+  'Batch Names': string;
+  parsedDate?: Date;
+}
 
-  const lostLeads = [
-    {
-      name: 'James Wilson',
-      country: 'Canada',
-      reason: 'Budget constraints',
-      lostDate: '2024-01-15',
-      counselor: 'Jessica Martinez',
-      potential: 'High',
-    },
-    {
-      name: 'Lisa Chen',
-      country: 'Australia',
-      reason: 'Changed mind about studying abroad',
-      lostDate: '2024-01-14',
-      counselor: 'Alex Thompson',
-      potential: 'Medium',
-    },
-    {
-      name: 'Mohammed Al-Rashid',
-      country: 'UK',
-      reason: 'Found another agency',
-      lostDate: '2024-01-13',
-      counselor: 'Priya Sharma',
-      potential: 'High',
-    },
-    {
-      name: 'Sofia Rodriguez',
-      country: 'Germany',
-      reason: 'Visa rejection concerns',
-      lostDate: '2024-01-12',
-      counselor: 'Robert Wilson',
-      potential: 'Low',
-    },
-    {
-      name: 'David Kim',
-      country: 'Canada',
-      reason: 'No response to follow-ups',
-      lostDate: '2024-01-11',
-      counselor: 'Jessica Martinez',
-      potential: 'Medium',
-    },
-  ];
+interface LostLeadsProps {
+  sharedLeadsData: LeadData[];
+}
 
-  const lossReasons = [
-    { reason: 'Budget constraints', count: 98, percentage: '28%' },
-    { reason: 'Found another agency', count: 67, percentage: '19%' },
-    { reason: 'Changed mind about studying abroad', count: 56, percentage: '16%' },
-    { reason: 'No response to follow-ups', count: 45, percentage: '13%' },
-    { reason: 'Visa rejection concerns', count: 34, percentage: '10%' },
-    { reason: 'Other', count: 47, percentage: '14%' },
-  ];
+const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
+
+const LostLeads = ({ sharedLeadsData }: LostLeadsProps) => {
+  const [timeFilter, setTimeFilter] = useState('all');
+
+  const lostLeadsData = useMemo(() => {
+    return sharedLeadsData.filter(lead => lead.status.toLowerCase().includes('lost'));
+  }, [sharedLeadsData]);
+
+  const lostLeadStats = useMemo(() => {
+    const totalLost = lostLeadsData.length;
+    const totalLeads = sharedLeadsData.length;
+    const lostPercentage = totalLeads > 0 ? Math.round((totalLost / totalLeads) * 100) : 0;
+    
+    const thisMonth = lostLeadsData.filter(lead => {
+      if (!lead.parsedDate) return false;
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      return lead.parsedDate.getMonth() === currentMonth && lead.parsedDate.getFullYear() === currentYear;
+    }).length;
+
+    return [
+      {
+        title: 'Total Lost Leads',
+        value: totalLost.toString(),
+        change: '+12.3%',
+        icon: XCircle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
+      },
+      {
+        title: 'Lost This Month',
+        value: thisMonth.toString(),
+        change: '+8.1%',
+        icon: AlertTriangle,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-100',
+      },
+      {
+        title: 'Avg. Time to Loss',
+        value: '4.2 days',
+        change: '-0.3 days',
+        icon: Clock,
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-100',
+      },
+      {
+        title: '% of Lost Leads',
+        value: `${lostPercentage}%`,
+        change: '+2.1%',
+        icon: TrendingDown,
+        color: 'text-red-600',
+        bgColor: 'bg-red-100',
+      },
+    ];
+  }, [lostLeadsData, sharedLeadsData]);
+
+  const getFilteredData = (data: LeadData[]) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    switch (timeFilter) {
+      case 'today':
+        return data.filter(lead => {
+          if (!lead.parsedDate) return false;
+          const leadDate = new Date(lead.parsedDate.getFullYear(), lead.parsedDate.getMonth(), lead.parsedDate.getDate());
+          return leadDate.getTime() === today.getTime();
+        });
+      case 'week':
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        return data.filter(lead => {
+          if (!lead.parsedDate) return false;
+          const leadDate = new Date(lead.parsedDate.getFullYear(), lead.parsedDate.getMonth(), lead.parsedDate.getDate());
+          return leadDate >= startOfWeek && leadDate <= today;
+        });
+      case 'month':
+        return data.filter(lead => {
+          if (!lead.parsedDate) return false;
+          return lead.parsedDate.getMonth() === now.getMonth() && lead.parsedDate.getFullYear() === now.getFullYear();
+        });
+      case 'year':
+        return data.filter(lead => {
+          if (!lead.parsedDate) return false;
+          return lead.parsedDate.getFullYear() === now.getFullYear();
+        });
+      default:
+        return data;
+    }
+  };
+
+  const lostLeadsOverTime = useMemo(() => {
+    const filteredData = getFilteredData(lostLeadsData);
+    if (!filteredData.length) return [];
+
+    const timeData: { [key: string]: number } = {};
+    
+    filteredData.forEach(lead => {
+      if (lead.parsedDate) {
+        let dateKey: string;
+        
+        if (timeFilter === 'today') {
+          dateKey = lead.parsedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        } else if (timeFilter === 'week') {
+          dateKey = lead.parsedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        } else if (timeFilter === 'month') {
+          dateKey = lead.parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } else if (timeFilter === 'year') {
+          dateKey = lead.parsedDate.toLocaleDateString('en-US', { month: 'short' });
+        } else {
+          dateKey = lead.parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        
+        timeData[dateKey] = (timeData[dateKey] || 0) + 1;
+      }
+    });
+
+    return Object.entries(timeData)
+      .map(([date, count]) => ({
+        date,
+        leads: count
+      }))
+      .sort((a, b) => {
+        if (timeFilter === 'today') {
+          return a.date.localeCompare(b.date);
+        }
+        return a.date.localeCompare(b.date);
+      });
+  }, [lostLeadsData, timeFilter]);
+
+  const lostLeadsByAssignee = useMemo(() => {
+    if (!lostLeadsData.length) return [];
+
+    const assigneeData: { [key: string]: number } = {};
+    
+    lostLeadsData.forEach(lead => {
+      const assignee = lead['Assignee Name'] || 'Unassigned';
+      assigneeData[assignee] = (assigneeData[assignee] || 0) + 1;
+    });
+
+    return Object.entries(assigneeData)
+      .map(([name, count]) => ({ name, count }))
+      .filter(item => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [lostLeadsData]);
+
+  const lostLeadsByCity = useMemo(() => {
+    if (!lostLeadsData.length) return [];
+
+    const cityData: { [key: string]: number } = {};
+    
+    lostLeadsData.forEach(lead => {
+      const city = lead.City;
+      if (city && city.toLowerCase() !== 'unknown' && city.trim() !== '') {
+        cityData[city] = (cityData[city] || 0) + 1;
+      }
+    });
+
+    return Object.entries(cityData)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 7);
+  }, [lostLeadsData]);
+
+  const lossReasons = useMemo(() => {
+    if (!lostLeadsData.length) return [];
+
+    const reasonCounts: { [key: string]: number } = {};
+    lostLeadsData.forEach(lead => {
+      const reason = lead['Lost Reason'] && lead['Lost Reason'] !== 'NA' ? lead['Lost Reason'] : 'Unknown';
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+
+    const total = Object.values(reasonCounts).reduce((sum, count) => sum + count, 0);
+    return Object.entries(reasonCounts)
+      .map(([reason, count]) => ({
+        name: reason,
+        value: count,
+        percentage: total > 0 ? Math.round((count / total) * 100) : 0
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [lostLeadsData]);
+
+  const recentLostLeads = useMemo(() => {
+    return lostLeadsData
+      .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))
+      .slice(0, 10)
+      .map(lead => ({
+        name: lead.Name || 'Unknown',
+        assignee: lead['Assignee Name'] || 'Unassigned',
+        reason: lead['Lost Reason'] || 'Unknown',
+        createdOn: lead.parsedDate ? lead.parsedDate.toLocaleDateString() : 'Unknown',
+        studentPreference: lead['Student Preference'] || 'Not specified',
+        email: lead.Email || '',
+        phone: lead.Phone || '',
+      }));
+  }, [lostLeadsData]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Lost Leads Analysis</h2>
-        <div className="mt-2 sm:mt-0">
-          <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option>Last 30 days</option>
-            <option>Last 7 days</option>
-            <option>Last 3 months</option>
-          </select>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -116,7 +246,9 @@ const LostLeads = () => {
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
                   <p className={`text-sm mt-1 ${
-                    stat.title === 'Recovery Rate' || stat.title === 'Avg. Time to Loss' ? 
+                    stat.title === '% of Lost Leads' ? 
+                      (isPositive ? 'text-red-600' : 'text-green-600') :
+                    stat.title === 'Avg. Time to Loss' ? 
                       (isNegative ? 'text-green-600' : 'text-red-600') :
                       (isPositive ? 'text-red-600' : 'text-green-600')
                   }`}>
@@ -133,124 +265,186 @@ const LostLeads = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Loss Reasons</h3>
-          <div className="space-y-3">
-            {lossReasons.map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">{item.reason}</span>
-                    <span className="text-sm text-gray-500">{item.count} leads ({item.percentage})</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-red-500 h-2 rounded-full" 
-                      style={{ width: item.percentage }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle>Lost Leads Over Time</CardTitle>
+            <select 
+              value={timeFilter} 
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+            </select>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{}} className="h-80">
+              <LineChart data={lostLeadsOverTime} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 11 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Line 
+                  type="monotone" 
+                  dataKey="leads" 
+                  stroke="#ef4444" 
+                  strokeWidth={2}
+                  dot={{ fill: '#ef4444', strokeWidth: 2, r: 4 }}
+                />
+              </LineChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recovery Opportunities</h3>
-          <div className="space-y-4">
-            {lostLeads.filter(lead => lead.potential === 'High').map((lead, index) => (
-              <div key={index} className="border border-orange-200 rounded-lg p-4 bg-orange-50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">{lead.name}</p>
-                    <p className="text-sm text-gray-600">Interested in {lead.country}</p>
-                    <p className="text-sm text-orange-600 mt-1">Reason: {lead.reason}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
-                      High Potential
-                    </span>
-                    <button className="block mt-2 px-3 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700 transition-colors">
-                      Re-engage
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Loss Reasons</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center">
+              <ChartContainer config={{}} className="h-80 w-full">
+                <PieChart margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                  <Pie
+                    data={lossReasons}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ percentage }) => `${percentage}%`}
+                  >
+                    {lossReasons.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Legend 
+                    verticalAlign="middle" 
+                    align="right"
+                    layout="vertical"
+                    iconSize={12}
+                    wrapperStyle={{
+                      paddingLeft: '20px',
+                      fontSize: '12px'
+                    }}
+                  />
+                </PieChart>
+              </ChartContainer>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Lost Leads</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Lead
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Country Interest
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Loss Reason
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Counselor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Recovery Potential
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date Lost
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {lostLeads.map((lead, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-gray-600">
-                          {lead.name.split(' ').map(n => n[0]).join('')}
-                        </span>
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-gray-900">{lead.name}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Lost Leads by Assignee</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{}} className="h-80">
+              <BarChart 
+                data={lostLeadsByAssignee} 
+                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="name" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  tick={{ fontSize: 11 }}
+                  label={{ value: 'Assignee Name', position: 'insideBottom', offset: -5 }}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Lost Leads by City</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{}} className="h-80">
+              <BarChart 
+                data={lostLeadsByCity} 
+                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis 
+                  dataKey="name" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  tick={{ fontSize: 11 }}
+                  label={{ value: 'City', position: 'insideBottom', offset: -5 }}
+                />
+                <YAxis tick={{ fontSize: 11 }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Recent Lost Leads
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {recentLostLeads.map((lead, index) => (
+              <div key={index} className="flex items-start space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <User className="h-6 w-6 text-red-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{lead.name}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Interested in {lead.studentPreference}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="flex items-center text-xs text-gray-500">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {lead.createdOn}
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {lead.country}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                    {lead.reason}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {lead.counselor}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      lead.potential === 'High' ? 'bg-red-100 text-red-800' :
-                      lead.potential === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'
-                    }`}>
-                      {lead.potential}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(lead.lostDate).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center text-gray-600">
+                      <User className="h-3 w-3 mr-1" />
+                      <span className="font-medium">Assignee:</span> {lead.assignee}
+                    </div>
+                    <div className="flex items-center text-gray-600">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      <span className="font-medium">Reason:</span> {lead.reason}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

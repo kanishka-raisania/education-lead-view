@@ -1,30 +1,14 @@
-import React, { useState, useMemo } from 'react';
-import { TrendingUp, Users, AlertTriangle, UserCheck, Upload, Filter, Calendar } from 'lucide-react';
-import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from '../ui/dropdown-menu';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../ui/chart';
-import { 
-  PieChart, 
-  Pie, 
-  Cell, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  LineChart, 
-  Line, 
-  ResponsiveContainer,
-  Legend 
-} from 'recharts';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Upload, Download, FileText, Users, TrendingUp, Calendar } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import Papa from 'papaparse';
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, startOfWeek, endOfWeek, subDays, startOfDay, endOfDay, startOfYear, endOfYear, getISOWeek, getYear, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface LeadData {
   status: string;
@@ -50,239 +34,157 @@ interface OverallLeadsProps {
   setSharedLeadsData: (data: LeadData[]) => void;
 }
 
-const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [timeFilter, setTimeFilter] = useState('All Time');
-  const [timeViewMode, setTimeViewMode] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Yearly'>('Monthly');
+const OverallLeads: React.FC<OverallLeadsProps> = ({ sharedLeadsData, setSharedLeadsData }) => {
+  const [leadsData, setLeadsData] = useState<LeadData[]>(sharedLeadsData);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateRange, setDateRange] = useState('all');
+  const [uploading, setUploading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
 
-  // Use shared data instead of local state
-  const leadsData = sharedLeadsData;
+  // Sync with shared data
+  React.useEffect(() => {
+    if (sharedLeadsData.length > 0) {
+      setLeadsData(sharedLeadsData);
+    }
+  }, [sharedLeadsData]);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Memoized filtered data to prevent unnecessary recalculations
+  const getFilteredData = useMemo(() => {
+    if (!leadsData || leadsData.length === 0) return [];
+
+    return leadsData.filter(lead => {
+      // Search filter
+      const matchesSearch = !searchTerm || 
+        (lead.Name && lead.Name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (lead.Email && lead.Email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (lead.Phone && lead.Phone.includes(searchTerm));
+
+      // Status filter
+      const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
+
+      // Date range filter
+      let matchesDate = true;
+      if (dateRange !== 'all' && lead.parsedDate) {
+        const now = new Date();
+        const leadDate = lead.parsedDate;
+        
+        switch (dateRange) {
+          case '7days':
+            matchesDate = (now.getTime() - leadDate.getTime()) <= 7 * 24 * 60 * 60 * 1000;
+            break;
+          case '30days':
+            matchesDate = (now.getTime() - leadDate.getTime()) <= 30 * 24 * 60 * 60 * 1000;
+            break;
+          case '90days':
+            matchesDate = (now.getTime() - leadDate.getTime()) <= 90 * 24 * 60 * 60 * 1000;
+            break;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesDate;
+    });
+  }, [leadsData, searchTerm, statusFilter, dateRange]);
+
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-    }
-  };
+    if (!file) return;
 
-  const parseDate = (dateString: string): Date | null => {
+    setUploading(true);
+    
     try {
-      // Parse format: "15-05-2025 12:06:07 pm"
-      const [datePart, timePart, ampm] = dateString.split(' ');
-      const [day, month, year] = datePart.split('-');
-      const [hours, minutes, seconds] = timePart.split(':');
+      const text = await file.text();
       
-      let hour = parseInt(hours);
-      if (ampm.toLowerCase() === 'pm' && hour !== 12) hour += 12;
-      if (ampm.toLowerCase() === 'am' && hour === 12) hour = 0;
-      
-      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
-    } catch {
-      return null;
-    }
-  };
-
-  const handleSubmit = () => {
-    if (selectedFile) {
-      console.log('Uploading file:', selectedFile.name);
-      
-      Papa.parse(selectedFile, {
+      Papa.parse(text, {
         header: true,
+        skipEmptyLines: true,
         complete: (results) => {
-          const processedData = results.data
-            .filter((row: any) => {
-              // Skip empty rows
-              return Object.values(row).some(value => value && value.toString().trim() !== '');
-            })
-            .map((row: any) => {
-              const parsedDate = parseDate(row['Created On']);
-              return {
-                ...row,
-                parsedDate
-              } as LeadData;
-            })
-            .filter(row => row.parsedDate); // Only keep rows with valid dates
+          const parsedData = results.data.map((row: any) => ({
+            ...row,
+            parsedDate: row['Created On'] ? new Date(row['Created On']) : new Date()
+          }));
           
-          setSharedLeadsData(processedData);
-          console.log('Processed data:', processedData);
+          setLeadsData(parsedData);
+          setSharedLeadsData(parsedData);
+          
+          toast({
+            title: "File uploaded successfully",
+            description: `Processed ${parsedData.length} leads`,
+          });
         },
         error: (error) => {
-          console.error('Error parsing CSV:', error);
+          console.error('Parse error:', error);
+          toast({
+            title: "Error parsing file",
+            description: "Please check your CSV format",
+            variant: "destructive",
+          });
         }
       });
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading your file",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
     }
-  };
+  }, [setSharedLeadsData, toast]);
 
-  const getFilteredData = useMemo(() => {
-    if (!leadsData.length) return [];
-
-    const now = new Date();
-    let startDate: Date;
-    let endDate = now;
-
-    switch (timeFilter) {
-      case 'Last 7 Days':
-        startDate = subDays(now, 7);
-        break;
-      case 'Last 30 Days':
-        startDate = subDays(now, 30);
-        break;
-      case 'This Month':
-        startDate = startOfMonth(now);
-        endDate = endOfMonth(now);
-        break;
-      case 'All Time':
-      default:
-        return leadsData;
+  const exportToCSV = useCallback(() => {
+    if (getFilteredData.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "Please upload data first",
+        variant: "destructive",
+      });
+      return;
     }
 
-    return leadsData.filter(lead => 
-      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: startDate, end: endDate })
-    );
-  }, [leadsData, timeFilter]);
-
-  const stats = useMemo(() => {
-    if (!leadsData.length) {
-      return [
-        {
-          title: 'Total Leads',
-          value: 'No Data',
-          change: 'No Data',
-          icon: Users,
-          color: 'text-blue-600',
-          bgColor: 'bg-blue-100',
-          changeColor: 'text-gray-500',
-        },
-        {
-          title: 'This Month',
-          value: 'No Data',
-          change: 'No Data',
-          icon: TrendingUp,
-          color: 'text-green-600',
-          bgColor: 'bg-green-100',
-          changeColor: 'text-gray-500',
-        },
-        {
-          title: 'Lost Leads',
-          value: 'No Data',
-          change: 'No Data',
-          icon: AlertTriangle,
-          color: 'text-red-600',
-          bgColor: 'bg-red-100',
-          changeColor: 'text-gray-500',
-        },
-        {
-          title: 'Fresh Leads',
-          value: 'No Data',
-          change: 'No Data',
-          icon: UserCheck,
-          color: 'text-green-600',
-          bgColor: 'bg-green-100',
-          changeColor: 'text-gray-500',
-        },
-      ];
+    setIsExporting(true);
+    
+    try {
+      const csv = Papa.unparse(getFilteredData);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `leads_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Export successful",
+        description: `Exported ${getFilteredData.length} leads`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export failed",
+        description: "There was an error exporting your data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
     }
+  }, [getFilteredData, toast]);
 
-    const filteredData = getFilteredData;
-    const now = new Date();
-    
-    // Current period data
-    const totalLeads = filteredData.length;
-    const lostLeads = filteredData.filter(lead => 
-      lead.status.toLowerCase().includes('lost')
-    ).length;
-    const freshLeads = filteredData.filter(lead => 
-      lead.status.toLowerCase().includes('fresh')
-    ).length;
-    
-    // This month data
-    const thisMonth = startOfMonth(now);
-    const endThisMonth = endOfMonth(now);
-    const thisMonthLeads = leadsData.filter(lead => 
-      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: thisMonth, end: endThisMonth })
-    ).length;
-    
-    // Previous month data for comparison
-    const lastMonth = startOfMonth(subMonths(now, 1));
-    const endLastMonth = endOfMonth(subMonths(now, 1));
-    const lastMonthLeads = leadsData.filter(lead => 
-      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth })
-    ).length;
-    const lastMonthLostLeads = leadsData.filter(lead => 
-      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth }) &&
-      lead.status.toLowerCase().includes('lost')
-    ).length;
-    const lastMonthFreshLeads = leadsData.filter(lead => 
-      lead.parsedDate && isWithinInterval(lead.parsedDate, { start: lastMonth, end: endLastMonth }) &&
-      lead.status.toLowerCase().includes('fresh')
-    ).length;
-    
-    // Calculate percentage changes
-    const totalLeadsChange = lastMonthLeads > 0 ? 
-      ((totalLeads - lastMonthLeads) / lastMonthLeads * 100).toFixed(1) : '0';
-    const thisMonthChange = lastMonthLeads > 0 ? 
-      ((thisMonthLeads - lastMonthLeads) / lastMonthLeads * 100).toFixed(1) : '0';
-    const lostLeadsChange = lastMonthLostLeads > 0 ? 
-      ((lostLeads - lastMonthLostLeads) / lastMonthLostLeads * 100).toFixed(1) : '0';
-    const freshLeadsChange = lastMonthFreshLeads > 0 ? 
-      ((freshLeads - lastMonthFreshLeads) / lastMonthFreshLeads * 100).toFixed(1) : '0';
-
-    return [
-      {
-        title: 'Total Leads',
-        value: totalLeads.toString(),
-        change: `${totalLeadsChange.startsWith('-') ? '' : '+'}${totalLeadsChange}%`,
-        icon: Users,
-        color: 'text-blue-600',
-        bgColor: 'bg-blue-100',
-        changeColor: parseFloat(totalLeadsChange) >= 0 ? 'text-green-600' : 'text-red-600',
-      },
-      {
-        title: 'This Month',
-        value: thisMonthLeads.toString(),
-        change: `${thisMonthChange.startsWith('-') ? '' : '+'}${thisMonthChange}%`,
-        icon: TrendingUp,
-        color: 'text-green-600',
-        bgColor: 'bg-green-100',
-        changeColor: parseFloat(thisMonthChange) >= 0 ? 'text-green-600' : 'text-red-600',
-      },
-      {
-        title: 'Lost Leads',
-        value: lostLeads.toString(),
-        change: `${lostLeadsChange.startsWith('-') ? '' : '+'}${lostLeadsChange}%`,
-        icon: AlertTriangle,
-        color: 'text-red-600',
-        bgColor: 'bg-red-100',
-        changeColor: parseFloat(lostLeadsChange) <= 0 ? 'text-green-600' : 'text-red-600',
-      },
-      {
-        title: 'Fresh Leads',
-        value: freshLeads.toString(),
-        change: `${freshLeadsChange.startsWith('-') ? '' : '+'}${freshLeadsChange}%`,
-        icon: UserCheck,
-        color: 'text-green-600',
-        bgColor: 'bg-green-100',
-        changeColor: parseFloat(freshLeadsChange) >= 0 ? 'text-green-600' : 'text-red-600',
-      },
-    ];
-  }, [getFilteredData, leadsData]);
-
-  // Professional color palette for charts
-  const CHART_COLORS = [
+  // Chart colors
+  const COLORS = [
     '#3B82F6', // Blue
     '#EF4444', // Red
     '#10B981', // Green
-    '#F59E0B', // Amber
+    '#F59E0B', // Yellow
     '#8B5CF6', // Purple
-    '#06B6D4', // Cyan
     '#F97316', // Orange
+    '#06B6D4', // Cyan
     '#84CC16', // Lime
     '#EC4899', // Pink
-    '#6B7280', // Gray
-    '#14B8A6', // Teal
-    '#F43F5E', // Rose
-    '#7C2D12', // Brown
-    '#7C3AED', // Violet
     '#059669', // Emerald
   ];
 
@@ -295,43 +197,19 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
       statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
     
-    return Object.entries(statusCounts)
-      .map(([status, count]) => ({
-        name: status,
-        value: count
-      }))
-      .sort((a, b) => a.value - b.value); // Sort in increasing order
+    return Object.entries(statusCounts).map(([status, count]) => ({
+      name: status,
+      value: count
+    }));
   }, [getFilteredData]);
 
-  const assigneeData = useMemo(() => {
-    if (!getFilteredData.length) return [];
-    
-    const assigneeCounts: { [key: string]: number } = {};
-    getFilteredData.forEach(lead => {
-      const assignee = lead['Assignee Name'] || '';
-      if (assignee.trim() !== '' && assignee !== 'Unassigned') {
-        assigneeCounts[assignee] = (assigneeCounts[assignee] || 0) + 1;
-      }
-    });
-    
-    return Object.entries(assigneeCounts)
-      .map(([assignee, leads]) => ({ 
-        name: assignee.length > 15 ? assignee.substring(0, 15) + '...' : assignee, 
-        leads,
-        fullName: assignee 
-      }))
-      .sort((a, b) => b.leads - a.leads)
-      .slice(0, 8);
-  }, [getFilteredData]);
-
-  const cityData = useMemo(() => {
+  const leadsByCityData = useMemo(() => {
     if (!getFilteredData.length) return [];
     
     const cityCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
       const city = lead.City;
       if (city && city.trim() !== '' && city.toLowerCase() !== 'unknown') {
-        // Clean the city name - remove extra spaces and standardize case
         const cleanCity = city.trim().toLowerCase()
           .split(' ')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -342,9 +220,9 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     
     return Object.entries(cityCounts)
       .map(([city, count]) => ({ name: city, value: count }))
-      .filter(item => item.value > 0) // Only include cities with actual data
-      .sort((a, b) => a.value - b.value) // Sort in increasing order
-      .slice(0, 10); // Show top 10 cities
+      .filter(item => item.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
   }, [getFilteredData]);
 
   const topAdsData = useMemo(() => {
@@ -352,33 +230,27 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     
     const adCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
-      const ad = lead['Facebook Ad'] || '';
+      const ad = lead['Facebook Ad'] || 'Unknown';
       if (ad.trim() !== '' && ad.toLowerCase() !== 'unknown') {
         adCounts[ad] = (adCounts[ad] || 0) + 1;
       }
     });
     
     return Object.entries(adCounts)
-      .map(([ad, leads]) => ({ 
-        name: ad.length > 20 ? ad.substring(0, 20) + '...' : ad, 
-        leads,
-        fullName: ad 
-      }))
-      .sort((a, b) => b.leads - a.leads)
-      .slice(0, 6);
+      .map(([ad, count]) => ({ name: ad.substring(0, 30) + (ad.length > 30 ? '...' : ''), value: count }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 7);
   }, [getFilteredData]);
 
-  const studentPreferenceData = useMemo(() => {
+  const studentPreferencesData = useMemo(() => {
     if (!getFilteredData.length) return [];
     
     const preferenceCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
       const preference = lead['Student Preference'];
       if (preference && preference.trim() !== '') {
-        // Clean and standardize the preference data
         const cleanPreference = preference.trim().toLowerCase();
         
-        // Skip meaningless values
         if (cleanPreference === 'other' || 
             cleanPreference === 'other_program' ||
             cleanPreference === 'unknown' ||
@@ -387,7 +259,6 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
           return;
         }
         
-        // Map common variations to standard names
         let standardizedPreference = cleanPreference;
         if (cleanPreference.includes('engineering')) {
           standardizedPreference = 'Engineering Programs';
@@ -400,7 +271,6 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
         } else if (cleanPreference.includes('computer') || cleanPreference.includes('it')) {
           standardizedPreference = 'Computer Science/IT';
         } else {
-          // Capitalize first letter of each word for display
           standardizedPreference = cleanPreference
             .split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -413,575 +283,345 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     
     return Object.entries(preferenceCounts)
       .map(([preference, count]) => ({ name: preference, value: count }))
-      .filter(item => item.value > 0) // Only include preferences with actual data
-      .sort((a, b) => a.value - b.value) // Sort in increasing order
-      .slice(0, 8); // Show top 8 preferences
+      .filter(item => item.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
   }, [getFilteredData]);
 
   const lostReasonData = useMemo(() => {
     if (!getFilteredData.length) return [];
     
+    const lostLeads = getFilteredData.filter(lead => lead.status === 'Lost');
+    if (lostLeads.length === 0) return [];
+    
     const reasonCounts: { [key: string]: number } = {};
-    getFilteredData
-      .filter(lead => lead.status.toLowerCase().includes('lost'))
-      .forEach(lead => {
-        const reason = lead['Lost Reason'] || 'Unknown';
-        if (reason.toLowerCase() !== 'na' && reason.trim() !== '') {
-          reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
-        }
-      });
-    
-    return Object.entries(reasonCounts)
-      .map(([reason, count]) => ({
-        name: reason,
-        value: count
-      }))
-      .sort((a, b) => a.value - b.value); // Sort in increasing order
-  }, [getFilteredData]);
-
-  const leadsOverTimeData = useMemo(() => {
-    if (!getFilteredData.length) return [];
-    
-    const timeCounts: { [key: string]: { count: number; sortKey: string } } = {};
-    const now = new Date();
-    
-    let filteredLeads = getFilteredData;
-    
-    // For weekly filter, only show weeks of current month
-    if (timeViewMode === 'Weekly') {
-      const currentMonthStart = startOfMonth(now);
-      const currentMonthEnd = endOfMonth(now);
-      filteredLeads = getFilteredData.filter(lead => 
-        lead.parsedDate && isWithinInterval(lead.parsedDate, { start: currentMonthStart, end: currentMonthEnd })
-      );
-    }
-    
-    filteredLeads.forEach(lead => {
-      if (!lead.parsedDate) return;
-      
-      let timeKey: string;
-      let sortKey: string;
-      
-      switch (timeViewMode) {
-        case 'Daily':
-          timeKey = format(lead.parsedDate, 'dd MMM');
-          sortKey = format(lead.parsedDate, 'yyyy-MM-dd');
-          break;
-        case 'Weekly':
-          const weekNum = getISOWeek(lead.parsedDate);
-          timeKey = `Week ${weekNum}`;
-          sortKey = `${format(lead.parsedDate, 'yyyy-MM')}-W${weekNum.toString().padStart(2, '0')}`;
-          break;
-        case 'Monthly':
-          timeKey = format(lead.parsedDate, 'MMM yyyy');
-          sortKey = format(lead.parsedDate, 'yyyy-MM');
-          break;
-        case 'Yearly':
-          timeKey = format(lead.parsedDate, 'yyyy');
-          sortKey = format(lead.parsedDate, 'yyyy');
-          break;
-        default:
-          timeKey = format(lead.parsedDate, 'MMM yyyy');
-          sortKey = format(lead.parsedDate, 'yyyy-MM');
+    lostLeads.forEach(lead => {
+      const reason = lead['Lost Reason'] || 'Unknown';
+      if (reason.trim() !== '' && reason.toLowerCase() !== 'unknown') {
+        reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
       }
-      
-      if (!timeCounts[timeKey]) {
-        timeCounts[timeKey] = { count: 0, sortKey };
-      }
-      timeCounts[timeKey].count++;
     });
     
-    return Object.entries(timeCounts)
-      .map(([time, data]) => ({ 
-        time, 
-        count: data.count,
-        sortKey: data.sortKey
-      }))
-      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  }, [getFilteredData, timeViewMode]);
-
-  const recentLeads = useMemo(() => {
-    if (!getFilteredData.length) return [];
-    
-    const now = new Date();
-    
-    const formatTimeAgo = (createdDate: Date): string => {
-      const diffMinutes = differenceInMinutes(now, createdDate);
-      const diffHours = differenceInHours(now, createdDate);
-      const diffDays = differenceInDays(now, createdDate);
-      
-      if (diffMinutes < 1) {
-        return 'Just now';
-      } else if (diffMinutes < 60) {
-        return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
-      } else if (diffHours < 24) {
-        return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
-      } else {
-        return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-      }
-    };
-    
-    return getFilteredData
-      .filter(lead => lead.parsedDate)
-      .sort((a, b) => (b.parsedDate?.getTime() || 0) - (a.parsedDate?.getTime() || 0))
-      .slice(0, 5)
-      .map(lead => ({
-        name: lead.Name || 'Unknown',
-        preference: lead['Student Preference'] || 'Unknown Program',
-        status: lead.status || 'Unknown',
-        timeAgo: lead.parsedDate ? formatTimeAgo(lead.parsedDate) : 'Unknown',
-      }));
+    return Object.entries(reasonCounts)
+      .map(([reason, count]) => ({ name: reason, value: count }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
   }, [getFilteredData]);
 
-  const CustomLegend = ({ data, title }: { data: any[], title: string }) => {
-    const displayData = data.slice(-5).reverse(); // Top 5 (last 5 from sorted increasing order)
-    const total = data.reduce((sum, item) => sum + (item.value || item.leads || item.count), 0);
-    
-    return (
-      <div className="space-y-2">
-        <h4 className="font-medium text-sm text-gray-700 mb-3">Top 5 {title}</h4>
-        {displayData.map((item, index) => {
-          const value = item.value || item.leads || item.count;
-          const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
-          return (
-            <div key={index} className="flex items-center justify-between text-xs">
-              <div className="flex items-center space-x-2">
-                <div 
-                  className="w-3 h-3 rounded-sm flex-shrink-0" 
-                  style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
-                />
-                <span className="text-gray-700 truncate max-w-24">{item.name}</span>
-              </div>
-              <div className="text-right">
-                <div className="font-medium">{value}</div>
-                <div className="text-gray-500">{percentage}%</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  const getUniqueValues = useCallback((field: keyof LeadData) => {
+    if (!leadsData.length) return [];
+    return [...new Set(leadsData.map(lead => lead[field]).filter(Boolean))];
+  }, [leadsData]);
+
+  const uniqueStatuses = getUniqueValues('status');
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Overall Leads Overview</h2>
-        <div className="mt-2 sm:mt-0 flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                {timeFilter}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {['Last 7 Days', 'Last 30 Days', 'This Month', 'All Time'].map((filter) => (
-                <DropdownMenuItem key={filter} onClick={() => setTimeFilter(filter)}>
-                  {filter}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Overall Leads Dashboard</h1>
+          <p className="text-gray-600 mt-1">Track and analyze your lead generation performance</p>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          <div className="relative">
+            <Input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="csv-upload"
+              disabled={uploading}
+            />
+            <Button 
+              onClick={() => document.getElementById('csv-upload')?.click()}
+              disabled={uploading}
+              className="w-full sm:w-auto"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {uploading ? 'Uploading...' : 'Upload CSV'}
+            </Button>
+          </div>
+          
+          <Button 
+            onClick={exportToCSV} 
+            variant="outline"
+            disabled={isExporting || getFilteredData.length === 0}
+            className="w-full sm:w-auto"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {isExporting ? 'Exporting...' : 'Export CSV'}
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div key={index} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                  {stat.change !== 'No Data' && (
-                    <p className={`text-sm mt-1 ${stat.changeColor}`}>{stat.change} from last month</p>
-                  )}
-                </div>
-                <div className={`${stat.bgColor} ${stat.color} p-3 rounded-lg`}>
-                  <Icon className="h-6 w-6" />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <Card className="bg-white">
+      {/* Filters Section */}
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5 text-blue-600" />
-            Upload Excel File
+            <FileText className="w-5 h-5" />
+            Filters & Search
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <input
-              type="file"
-              accept=".xlsx,.csv"
-              onChange={handleFileChange}
-              className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-            />
-            <p className="text-sm text-gray-500">Upload a new Excel or CSV file.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Search</label>
+              <Input
+                placeholder="Search by name, email, or phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {uniqueStatuses.map(status => (
+                    <SelectItem key={status} value={status}>{status}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-2 block">Date Range</label>
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select date range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="7days">Last 7 Days</SelectItem>
+                  <SelectItem value="30days">Last 30 Days</SelectItem>
+                  <SelectItem value="90days">Last 90 Days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Button 
-            onClick={handleSubmit}
-            disabled={!selectedFile}
-            className="w-full sm:w-auto"
-          >
-            Submit
-          </Button>
+          
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Badge variant="outline" className="bg-blue-50">
+              {getFilteredData.length} of {leadsData.length} leads
+            </Badge>
+            {searchTerm && <Badge variant="outline">Search: "{searchTerm}"</Badge>}
+            {statusFilter !== 'all' && <Badge variant="outline">Status: {statusFilter}</Badge>}
+            {dateRange !== 'all' && <Badge variant="outline">Date: {dateRange}</Badge>}
+          </div>
         </CardContent>
       </Card>
 
-      {leadsData.length > 0 && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Leads Over Time</CardTitle>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      {timeViewMode}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    {(['Daily', 'Weekly', 'Monthly', 'Yearly'] as const).map((mode) => (
-                      <DropdownMenuItem key={mode} onClick={() => setTimeViewMode(mode)}>
-                        {mode}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Leads</p>
+                <p className="text-2xl font-bold text-gray-900">{getFilteredData.length}</p>
               </div>
-            </CardHeader>
-            <CardContent>
-              {leadsOverTimeData.length > 0 ? (
-                <ChartContainer config={{}} className="h-80">
-                  <LineChart data={leadsOverTimeData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis 
-                      dataKey="time" 
-                      tick={{ fontSize: 12 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 12 }}
-                      label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
-                    />
-                    <ChartTooltip 
-                      content={<ChartTooltipContent />}
-                      labelFormatter={(value) => `Period: ${value}`}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="count" 
-                      stroke="#3B82F6" 
-                      strokeWidth={3}
-                      dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
-                      activeDot={{ r: 6, stroke: '#3B82F6', strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ChartContainer>
-              ) : (
-                <div className="h-80 flex items-center justify-center text-gray-500">
-                  No data available
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Lead Status Distribution</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {statusDistribution.length > 0 ? (
-                  <div className="flex items-center gap-4">
-                    <div className="flex-shrink-0 w-48">
-                      <CustomLegend data={statusDistribution} title="Status" />
-                    </div>
-                    <div className="flex-1">
-                      <ChartContainer config={{}} className="h-64">
-                        <PieChart>
-                          <Pie
-                            data={statusDistribution}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={30}
-                            outerRadius={100}
-                            dataKey="value"
-                            label={false}
-                          >
-                            {statusDistribution.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                        </PieChart>
-                      </ChartContainer>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    No data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Leads by Assignee</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {assigneeData.length > 0 ? (
-                  <ChartContainer config={{}} className="h-96">
-                    <BarChart 
-                      data={assigneeData} 
-                      margin={{ top: 20, right: 30, left: 20, bottom: 120 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis 
-                        dataKey="name" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={140}
-                        interval={0}
-                        tick={{ fontSize: 11 }}
-                      />
-                      <YAxis 
-                        tick={{ fontSize: 12 }}
-                        label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
-                      />
-                      <ChartTooltip 
-                        content={<ChartTooltipContent />}
-                        labelFormatter={(value, payload) => {
-                          const item = assigneeData.find(d => d.name === value);
-                          return item?.fullName || value;
-                        }}
-                      />
-                      <Bar 
-                        dataKey="leads" 
-                        fill="#3B82F6" 
-                        radius={[4, 4, 0, 0]}
-                        minPointSize={5}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                ) : (
-                  <div className="h-96 flex items-center justify-center text-gray-500">
-                    No data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Leads by City</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {cityData.length > 0 ? (
-                  <div className="flex items-center gap-4">
-                    <div className="flex-shrink-0 w-48">
-                      <CustomLegend data={cityData} title="Cities" />
-                    </div>
-                    <div className="flex-1">
-                      <ChartContainer config={{}} className="h-64">
-                        <PieChart>
-                          <Pie
-                            data={cityData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={30}
-                            outerRadius={100}
-                            dataKey="value"
-                            label={false}
-                          >
-                            {cityData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                        </PieChart>
-                      </ChartContainer>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    No data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Performing Ads</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {topAdsData.length > 0 ? (
-                  <ChartContainer config={{}} className="h-96">
-                    <BarChart 
-                      data={topAdsData} 
-                      margin={{ top: 20, right: 30, left: 20, bottom: 140 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis 
-                        dataKey="name" 
-                        angle={-45}
-                        textAnchor="end"
-                        height={160}
-                        interval={0}
-                        tick={{ fontSize: 10 }}
-                      />
-                      <YAxis 
-                        tick={{ fontSize: 12 }}
-                        label={{ value: 'Number of Leads', angle: -90, position: 'insideLeft' }}
-                      />
-                      <ChartTooltip 
-                        content={<ChartTooltipContent />}
-                        labelFormatter={(value, payload) => {
-                          const item = topAdsData.find(d => d.name === value);
-                          return item?.fullName || value;
-                        }}
-                      />
-                      <Bar 
-                        dataKey="leads" 
-                        fill="#F59E0B" 
-                        radius={[4, 4, 0, 0]}
-                        minPointSize={5}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                ) : (
-                  <div className="h-96 flex items-center justify-center text-gray-500">
-                    No data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Student Preferences</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {studentPreferenceData.length > 0 ? (
-                  <div className="flex items-center gap-4">
-                    <div className="flex-shrink-0 w-48">
-                      <CustomLegend data={studentPreferenceData} title="Preferences" />
-                    </div>
-                    <div className="flex-1">
-                      <ChartContainer config={{}} className="h-64">
-                        <PieChart>
-                          <Pie
-                            data={studentPreferenceData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={30}
-                            outerRadius={100}
-                            dataKey="value"
-                            label={false}
-                          >
-                            {studentPreferenceData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                        </PieChart>
-                      </ChartContainer>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-64 flex items-center justify-center text-gray-500">
-                    No data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {lostReasonData.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Lost Leads Reason</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-shrink-0 w-48">
-                      <CustomLegend data={lostReasonData} title="Reasons" />
-                    </div>
-                    <div className="flex-1">
-                      <ChartContainer config={{}} className="h-64">
-                        <PieChart>
-                          <Pie
-                            data={lostReasonData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={40}
-                            outerRadius={100}
-                            dataKey="value"
-                            label={false}
-                          >
-                            {lostReasonData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                        </PieChart>
-                      </ChartContainer>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Lead Activity</h3>
-        <div className="space-y-4">
-          {recentLeads.length > 0 ? recentLeads.map((lead, index) => (
-            <div key={index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600">
-                    {lead.name.split(' ').map(n => n[0]).join('')}
-                  </span>
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">{lead.name}</p>
-                  <p className="text-sm text-gray-600">Interested in {lead.preference}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  lead.status.toLowerCase().includes('new') || lead.status.toLowerCase().includes('fresh') ? 'bg-blue-100 text-blue-800' :
-                  lead.status.toLowerCase().includes('contacted') ? 'bg-yellow-100 text-yellow-800' :
-                  lead.status.toLowerCase().includes('follow') ? 'bg-orange-100 text-orange-800' :
-                  lead.status.toLowerCase().includes('lost') ? 'bg-red-100 text-red-800' :
-                  'bg-green-100 text-green-800'
-                }`}>
-                  {lead.status}
-                </span>
-                <p className="text-xs text-gray-500 mt-1">{lead.timeAgo}</p>
-              </div>
+              <Users className="w-8 h-8 text-blue-600" />
             </div>
-          )) : (
-            <div className="text-center text-gray-500 py-8">
-              No recent leads available. Upload data to see activity.
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Won Leads</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {getFilteredData.filter(lead => lead.status === 'Won').length}
+                </p>
+              </div>
+              <TrendingUp className="w-8 h-8 text-green-600" />
             </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Lost Leads</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {getFilteredData.filter(lead => lead.status === 'Lost').length}
+                </p>
+              </div>
+              <Users className="w-8 h-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">In Progress</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {getFilteredData.filter(lead => 
+                    lead.status !== 'Won' && lead.status !== 'Lost'
+                  ).length}
+                </p>
+              </div>
+              <Calendar className="w-8 h-8 text-yellow-600" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Status Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Lead Status Distribution</CardTitle>
+            <CardDescription>Overview of all lead statuses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {statusDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={statusDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {statusDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-500">
+                No data available - please upload a CSV file
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Leads by City */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Leads by City</CardTitle>
+            <CardDescription>Top 10 cities with most leads</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {leadsByCityData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={leadsByCityData} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={80} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#3B82F6" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-500">
+                No city data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Facebook Ads */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Performing Facebook Ads</CardTitle>
+            <CardDescription>Ads generating the most leads</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topAdsData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topAdsData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#10B981" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-500">
+                No Facebook ads data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Student Preferences */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Student Preferences</CardTitle>
+            <CardDescription>Popular course preferences</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {studentPreferencesData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={studentPreferencesData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {studentPreferencesData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-500">
+                No student preference data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Lost Reasons Analysis */}
+      {lostReasonData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Lost Lead Reasons</CardTitle>
+            <CardDescription>Analysis of why leads were lost</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={lostReasonData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="#EF4444" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

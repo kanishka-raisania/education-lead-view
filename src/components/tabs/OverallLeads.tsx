@@ -286,7 +286,6 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     '#059669', // Emerald
   ];
 
-  // Chart data processing
   const statusDistribution = useMemo(() => {
     if (!getFilteredData.length) return [];
     
@@ -330,16 +329,22 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     
     const cityCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
-      const city = lead.City || '';
-      if (city.trim() !== '' && city.toLowerCase() !== 'unknown') {
-        cityCounts[city] = (cityCounts[city] || 0) + 1;
+      const city = lead.City;
+      if (city && city.trim() !== '' && city.toLowerCase() !== 'unknown') {
+        // Clean the city name - remove extra spaces and standardize case
+        const cleanCity = city.trim().toLowerCase()
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        cityCounts[cleanCity] = (cityCounts[cleanCity] || 0) + 1;
       }
     });
     
     return Object.entries(cityCounts)
       .map(([city, count]) => ({ name: city, value: count }))
+      .filter(item => item.value > 0) // Only include cities with actual data
       .sort((a, b) => a.value - b.value) // Sort in increasing order
-      .slice(0, 7);
+      .slice(0, 10); // Show top 10 cities
   }, [getFilteredData]);
 
   const topAdsData = useMemo(() => {
@@ -368,20 +373,49 @@ const OverallLeads = ({ sharedLeadsData, setSharedLeadsData }: OverallLeadsProps
     
     const preferenceCounts: { [key: string]: number } = {};
     getFilteredData.forEach(lead => {
-      const preference = lead['Student Preference'] || '';
-      const cleanPref = preference.trim();
-      if (cleanPref !== '' && 
-          cleanPref.toLowerCase() !== 'other' && 
-          cleanPref.toLowerCase() !== 'other_program' &&
-          cleanPref.toLowerCase() !== 'unknown') {
-        preferenceCounts[cleanPref] = (preferenceCounts[cleanPref] || 0) + 1;
+      const preference = lead['Student Preference'];
+      if (preference && preference.trim() !== '') {
+        // Clean and standardize the preference data
+        const cleanPreference = preference.trim().toLowerCase();
+        
+        // Skip meaningless values
+        if (cleanPreference === 'other' || 
+            cleanPreference === 'other_program' ||
+            cleanPreference === 'unknown' ||
+            cleanPreference === 'na' ||
+            cleanPreference === '') {
+          return;
+        }
+        
+        // Map common variations to standard names
+        let standardizedPreference = cleanPreference;
+        if (cleanPreference.includes('engineering')) {
+          standardizedPreference = 'Engineering Programs';
+        } else if (cleanPreference.includes('management') || cleanPreference.includes('msc_in_management')) {
+          standardizedPreference = 'Management Programs';
+        } else if (cleanPreference.includes('healthcare')) {
+          standardizedPreference = 'Healthcare Programs';
+        } else if (cleanPreference.includes('business')) {
+          standardizedPreference = 'Business Programs';
+        } else if (cleanPreference.includes('computer') || cleanPreference.includes('it')) {
+          standardizedPreference = 'Computer Science/IT';
+        } else {
+          // Capitalize first letter of each word for display
+          standardizedPreference = cleanPreference
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        }
+        
+        preferenceCounts[standardizedPreference] = (preferenceCounts[standardizedPreference] || 0) + 1;
       }
     });
     
     return Object.entries(preferenceCounts)
       .map(([preference, count]) => ({ name: preference, value: count }))
+      .filter(item => item.value > 0) // Only include preferences with actual data
       .sort((a, b) => a.value - b.value) // Sort in increasing order
-      .slice(0, 7);
+      .slice(0, 8); // Show top 8 preferences
   }, [getFilteredData]);
 
   const lostReasonData = useMemo(() => {
